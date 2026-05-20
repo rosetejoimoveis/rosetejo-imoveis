@@ -334,7 +334,7 @@ async function refreshData(){
     if(!data.dismissedAlerts)data.dismissedAlerts=[];
     if(!data.nextId)data.nextId=1;
     data.imoveis.forEach(i=>{
-      if(!i.srv)i.srv='intermediacao';
+      if(!i.srv)i.srv='inter_completa'; else if(i.srv==='intermediacao')i.srv='inter_completa'; else if(i.srv==='administracao')i.srv='adm_completa';
       if(i.condominio===undefined)i.condominio=0;
       if(!i.historico)i.historico=[];
     });
@@ -362,31 +362,96 @@ const toISO=disp=>{if(!disp||disp.length<10)return'';const[d,m,y]=disp.split('/'
 function maskDate(el,field){let v=el.value.replace(/\D/g,'');if(v.length>2)v=v.slice(0,2)+'/'+v.slice(2);if(v.length>5)v=v.slice(0,5)+'/'+v.slice(5);el.value=v.slice(0,10);F[field]=toISO(el.value);}
 
 /* ── Receita ── */
+// Tipos de serviço:
+// inter_completa       → 100% 1º aluguel na assinatura
+// inter_parceria       → 50%  1º aluguel na assinatura
+// inter_parcial        → 25%  1º aluguel na assinatura
+// adm_completa         → 100% 1º aluguel na assinatura + 10%/mês a partir do 2º mês
+// adm_parceria         → 50%  1º aluguel na assinatura + 10%/mês a partir do 2º mês
+// adm_parcial          → 100% 1º aluguel todo ano no mês de início
+// adm_parcial_parceria → 50%  1º aluguel todo ano no mês de início
+
 function recDoMes(im,y,m){
   if(im.status!=='Alugado')return{tipo:null,val:0,det:''};
-  // Verificar contrato atual
   const a=im.aluguel||0;
+  const srv=im.srv||'inter_completa';
   const mesRef=new Date(y,m-1,1);
-  // Checar se este mês é assinatura do contrato atual
+
+  // Verificar se é o mês de assinatura (contrato atual ou renovação)
   let assina=false;
-  if(im.inicioContrato){const[iy,im2]=im.inicioContrato.split('-').map(Number);if(iy===y&&im2===m)assina=true;}
-  // Checar se este mês é assinatura de alguma renovação
+  let mesInicioMes=null,mesInicioAno=null;
+  if(im.inicioContrato){
+    const[iy,im2]=im.inicioContrato.split('-').map(Number);
+    mesInicioMes=im2;mesInicioAno=iy;
+    if(iy===y&&im2===m)assina=true;
+  }
   if(!assina&&im.historico){
     for(const h of im.historico){
-      if(h.tipo==='renovacao'&&h.inicioContrato){
+      if(h.inicioContrato){
         const[hy,hm]=h.inicioContrato.split('-').map(Number);
         if(hy===y&&hm===m){assina=true;break;}
       }
     }
   }
-  if(im.srv==='administracao'){
-    if(assina){return{tipo:'loc',val:a,det:'1º aluguel — locação / renovação'};}
-    if(im.inicioContrato){const ini=new Date(im.inicioContrato),ok=im.fimContrato?mesRef<=new Date(im.fimContrato):true;if(mesRef>ini&&ok){return{tipo:'adm-m',val:a*.1,det:`10% de ${fR(a)}`};}}
-    return{tipo:null,val:0,det:''};
-  }else{
-    if(assina)return{tipo:'inter',val:a,det:'1º aluguel — locação / renovação'};
+
+  // Verificar se contrato está ativo neste mês
+  function contratoAtivo(){
+    if(!im.inicioContrato)return false;
+    const ini=new Date(im.inicioContrato);
+    if(mesRef<ini)return false;
+    if(im.fimContrato&&mesRef>new Date(im.fimContrato))return false;
+    return true;
+  }
+
+  // ── INTERMEDIAÇÕES ──
+  if(srv==='inter_completa'||srv==='intermediacao'){
+    if(assina)return{tipo:'loc',val:a,det:'1º aluguel — Intermediação completa (100%)'};
     return{tipo:null,val:0,det:''};
   }
+  if(srv==='inter_parceria'){
+    if(assina)return{tipo:'loc',val:a*.5,det:`Intermediação com parceria (50% de ${fR(a)})`};
+    return{tipo:null,val:0,det:''};
+  }
+  if(srv==='inter_parcial'){
+    if(assina)return{tipo:'loc',val:a*.25,det:`Intermediação parcial (25% de ${fR(a)})`};
+    return{tipo:null,val:0,det:''};
+  }
+
+  // ── ADMINISTRAÇÕES ──
+  if(srv==='adm_completa'||srv==='administracao'){
+    if(assina)return{tipo:'loc',val:a,det:'1º aluguel — Administração completa (100%)'};
+    if(contratoAtivo()&&!assina){
+      const ini=new Date(im.inicioContrato);
+      if(mesRef>ini)return{tipo:'adm-m',val:a*.1,det:`10% de ${fR(a)} — Administração`};
+    }
+    return{tipo:null,val:0,det:''};
+  }
+  if(srv==='adm_parceria'){
+    if(assina)return{tipo:'loc',val:a*.5,det:`50% do 1º aluguel — Administração com parceria`};
+    if(contratoAtivo()&&!assina){
+      const ini=new Date(im.inicioContrato);
+      if(mesRef>ini)return{tipo:'adm-m',val:a*.1,det:`10% de ${fR(a)} — Administração`};
+    }
+    return{tipo:null,val:0,det:''};
+  }
+  if(srv==='adm_parcial'){
+    // Recebe 100% do 1º aluguel todo ano no mês de início do contrato
+    if(!mesInicioMes)return{tipo:null,val:0,det:''};
+    if(m===mesInicioMes&&contratoAtivo()){
+      const label=assina?'1º aluguel (assinatura)':'Aniversário do contrato';
+      return{tipo:'loc',val:a,det:`${label} — Administração parcial (100% anual)`};
+    }
+    return{tipo:null,val:0,det:''};
+  }
+  if(srv==='adm_parcial_parceria'){
+    if(!mesInicioMes)return{tipo:null,val:0,det:''};
+    if(m===mesInicioMes&&contratoAtivo()){
+      const label=assina?'1º aluguel (assinatura)':'Aniversário do contrato';
+      return{tipo:'loc',val:a*.5,det:`${label} — Administração parcial com parceria (50% anual)`};
+    }
+    return{tipo:null,val:0,det:''};
+  }
+  return{tipo:null,val:0,det:''};
 }
 
 /* ── Receita de vendas por mês ── */
@@ -527,7 +592,15 @@ async function restoreAlerts(){data.dismissedAlerts=[];await persist();render();
 /* ── Badges ── */
 const bC=im=>{const s=stC(im);if(!s)return`<span class="badge neutral">Sem contrato</span>`;if(s==='exp')return`<span class="badge crit"><i class="ti ti-alert-circle"></i>Vencido</span>`;const d=dT(im.fimContrato);if(s==='crit')return`<span class="badge crit"><i class="ti ti-clock"></i>${d}d</span>`;return`<span class="badge ok"><i class="ti ti-check"></i>OK</span>`;};
 const bI=im=>{const s=stI(im);if(!s)return`<span class="badge neutral">—</span>`;if(s==='exp')return`<span class="badge crit">Vencido</span>`;const d=dT(im.iptuVenc);if(s==='crit')return`<span class="badge crit">${d}d</span>`;return`<span class="badge ok"><i class="ti ti-check"></i>OK</span>`;};
-const bS=im=>im.srv==='administracao'?`<span class="badge purple"><i class="ti ti-settings"></i>Administração</span>`:`<span class="badge info"><i class="ti ti-handshake"></i>Intermediação</span>`;
+const SRV_LABELS={
+  'inter_completa':'Interm. Completa','intermediacao':'Interm. Completa',
+  'inter_parceria':'Interm. c/ Parceria','inter_parcial':'Interm. Parcial',
+  'adm_completa':'Adm. Completa','administracao':'Adm. Completa',
+  'adm_parceria':'Adm. c/ Parceria',
+  'adm_parcial':'Adm. Parcial','adm_parcial_parceria':'Adm. Parcial c/ Parceria'
+};
+const isAdmTipo=srv=>srv&&(srv.startsWith('adm')||srv==='administracao');
+const bS=im=>{const lbl=SRV_LABELS[im.srv]||im.srv||'—';return isAdmTipo(im.srv)?`<span class="badge purple"><i class="ti ti-settings"></i>${lbl}</span>`:`<span class="badge info"><i class="ti ti-handshake"></i>${lbl}</span>`;};
 
 /* ── Nav ── */
 function go(t){curTab=t;document.querySelectorAll('.tab').forEach(el=>el.classList.remove('active'));document.getElementById('tab_'+t).classList.add('active');render();}
@@ -692,10 +765,19 @@ function renderModal(){
     <div class="form-row"><label>Status</label><select onchange="F.status=this.value">${['Disponível','Alugado','Em reforma'].map(t=>`<option${F.status===t?' selected':''}>${t}</option>`).join('')}</select></div>
   </div>
   <div class="slbl">Tipo de serviço</div>
-  <div class="form-row"><label>Participação da imobiliária</label>
+  <div class="form-row"><label>Tipo de serviço</label>
     <select onchange="F.srv=this.value;updPrev()">
-      <option value="intermediacao"${F.srv==='intermediacao'?' selected':''}>Intermediação — recebe apenas o 1º aluguel</option>
-      <option value="administracao"${F.srv==='administracao'?' selected':''}>Administração — 1º aluguel + 10% a partir do 2º mês</option>
+      <optgroup label="── Intermediação ──">
+        <option value="inter_completa"${F.srv==='inter_completa'||F.srv==='intermediacao'?' selected':''}>Intermediação Completa — 100% do 1º aluguel</option>
+        <option value="inter_parceria"${F.srv==='inter_parceria'?' selected':''}>Intermediação Completa com Parceria — 50% do 1º aluguel</option>
+        <option value="inter_parcial"${F.srv==='inter_parcial'?' selected':''}>Intermediação Parcial — 25% do 1º aluguel</option>
+      </optgroup>
+      <optgroup label="── Administração ──">
+        <option value="adm_completa"${F.srv==='adm_completa'||F.srv==='administracao'?' selected':''}>Administração Completa — 100% do 1º aluguel + 10%/mês</option>
+        <option value="adm_parceria"${F.srv==='adm_parceria'?' selected':''}>Administração Completa com Parceria — 50% do 1º aluguel + 10%/mês</option>
+        <option value="adm_parcial"${F.srv==='adm_parcial'?' selected':''}>Administração Parcial — 100% do 1º aluguel todo ano</option>
+        <option value="adm_parcial_parceria"${F.srv==='adm_parcial_parceria'?' selected':''}>Administração Parcial com Parceria — 50% do 1º aluguel todo ano</option>
+      </optgroup>
     </select></div>
   <div class="slbl">Valores</div>
   <div class="fg">
@@ -744,7 +826,7 @@ function renderDashboard(){
     <p>Gerado em ${new Date().toLocaleDateString('pt-BR')}</p>
   </div>
   <div style="display:flex;justify-content:flex-end;margin-bottom:12px" class="no-print">
-    <button class="btn sm" onclick="window.print()"><i class="ti ti-printer"></i>Imprimir</button>
+    <button class="btn sm" onclick="window.print()"><i class="ti ti-printer"></i>Imprimir lista</button>
   </div>
   <div class="metrics">
     <div class="metric"><div class="ml"><i class="ti ti-building"></i>Imóveis</div><div class="mv">${data.imoveis.length}</div><div class="ms">${alugados.length} alugado${alugados.length!==1?'s':''}</div></div>
@@ -780,7 +862,7 @@ function renderReceita(){
     <input type="month" value="${p2(y)}-${p2(m)}" onchange="setMonth(this.value)">
     <button class="mnav" onclick="nextMonth()"><i class="ti ti-chevron-right"></i></button>
     <span class="month-lbl">${MESES[m-1]} ${y}</span>
-    <button class="btn sm no-print" onclick="window.print()" style="margin-left:auto"><i class="ti ti-printer"></i>Imprimir</button>
+    <button class="btn sm no-print" onclick="window.print()" style="margin-left:auto"><i class="ti ti-printer"></i>Imprimir lista</button>
   </div>
   <div class="print-header">
     <h2>Receita por Mês — ${MESES[m-1]} ${y}</h2>
@@ -810,7 +892,7 @@ function renderImoveis(){
   <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px" class="no-print">
     <span style="font-size:15px;font-weight:500">Imóveis (${data.imoveis.length})</span>
     <div style="display:flex;gap:8px">
-      <button class="btn sm" onclick="window.print()"><i class="ti ti-printer"></i>Imprimir</button>
+      <button class="btn sm" onclick="window.print()"><i class="ti ti-printer"></i>Imprimir lista</button>
       <button class="btn primary" onclick="openNew()"><i class="ti ti-plus"></i>Novo imóvel</button>
     </div>
   </div>
@@ -833,7 +915,7 @@ function renderContratos(){
     <p>Gerado em ${new Date().toLocaleDateString('pt-BR')} · ${allC.length} contrato${allC.length!==1?'s':''} cadastrado${allC.length!==1?'s':''}</p>
   </div>
   <div style="display:flex;justify-content:flex-end;margin-bottom:12px" class="no-print">
-    <button class="btn sm" onclick="window.print()"><i class="ti ti-printer"></i>Imprimir</button>
+    <button class="btn sm" onclick="window.print()"><i class="ti ti-printer"></i>Imprimir lista</button>
   </div>
   ${filterBar('contratos')}
   <div class="card"><div class="card-hd"><span class="card-title">Contratos — por vencimento</span></div>${allC.length===0?`<div class="no-data"><i class="ti ti-file-off"></i>Nenhum contrato cadastrado</div>`:sorted.length===0?`<div class="no-data"><i class="ti ti-search"></i>Nenhum resultado encontrado.</div>`:`<table><thead><tr><th>Imóvel</th><th>Proprietário / Inquilino</th><th>Início</th><th>Vencimento</th><th>Prazo</th><th>Receita da imobiliária</th><th></th></tr></thead><tbody>${sorted.map(im=>{const d=dT(im.fimContrato),label=d<0?`Vencido há ${Math.abs(d)}d`:d===0?'Hoje':`${d}d`;const a=im.aluguel||0;const rec=im.status!=='Alugado'?'—':(im.srv==='administracao'?`${fR(a)} + ${fR(a*.1)}/mês (administração)`:`${fR(a)} — locação`);return`<tr><td><div class="tdname">${esc(im.nome)}</div><div class="tdsub">${bS(im)}</div></td><td style="font-size:12px"><div class="tdname">${esc(im.proprietario||'—')}</div><div class="tdsub">${esc(im.inquilino||'—')}</div></td><td style="font-size:12px">${fD(im.inicioContrato)}</td><td style="font-size:12px">${fD(im.fimContrato)}</td><td>${bC(im)} <span style="font-size:11px;color:var(--text2)">${label}</span></td><td style="font-size:12px;font-weight:500;white-space:nowrap">${rec}</td><td class="ac" style="white-space:nowrap"><button class="icon-btn" onclick="openRenovar(${im.id})" title="Renovar contrato" style="color:var(--s-text)"><i class="ti ti-refresh"></i></button><button class="icon-btn del" onclick="openEncerrar(${im.id})" title="Encerrar contrato"><i class="ti ti-door-exit"></i></button></td></tr>`;}).join('')}</tbody></table>`}</div>`;
@@ -849,7 +931,7 @@ function renderIptu(){
     <p>Gerado em ${new Date().toLocaleDateString('pt-BR')} · Total anual: ${fR(total)}</p>
   </div>
   <div style="display:flex;justify-content:flex-end;margin-bottom:12px" class="no-print">
-    <button class="btn sm" onclick="window.print()"><i class="ti ti-printer"></i>Imprimir</button>
+    <button class="btn sm" onclick="window.print()"><i class="ti ti-printer"></i>Imprimir lista</button>
   </div>
   ${searchBox('iptu')}<div class="metrics"><div class="metric"><div class="ml"><i class="ti ti-receipt-2"></i>IPTU anual total</div><div class="mv">${fR(total)}</div></div><div class="metric"><div class="ml"><i class="ti ti-alert-triangle"></i>Vencimento próximo (≤30 dias)</div><div class="mv" style="color:var(--w-text)">${data.imoveis.filter(i=>stI(i)==='crit').length}</div></div></div><div class="card"><div class="card-hd"><span class="card-title">IPTU — por vencimento</span></div>${sorted.length===0?`<div class="no-data"><i class="ti ti-receipt-off"></i>${allI.length===0?'Nenhum IPTU cadastrado':'Nenhum resultado encontrado.'}</div>`:`<table><thead><tr><th>Imóvel</th><th>Proprietário</th><th>IPTU anual</th><th>Vencimento</th><th>Status</th></tr></thead><tbody>${sorted.map(im=>{const d=dT(im.iptuVenc),label=d===null?'':d<0?`Há ${Math.abs(d)}d`:d===0?'Hoje':`${d}d`;return`<tr><td><div class="tdname">${esc(im.nome)}</div><div class="tdsub">${esc(im.endereco||'')}</div></td><td style="font-size:12px">${esc(im.proprietario||'—')}</td><td style="font-size:12px">${im.iptuAnual?fR(im.iptuAnual):'—'}</td><td style="font-size:12px">${fD(im.iptuVenc)}</td><td>${bI(im)} <span style="font-size:11px;color:var(--text2)">${label}</span></td></tr>`;}).join('')}</tbody></table>`}</div>`;
 }
@@ -931,7 +1013,7 @@ function renderVendas(){
   <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px" class="no-print">
     <span style="font-size:15px;font-weight:500">Vendas (${(data.vendas||[]).length})</span>
     <div style="display:flex;gap:8px">
-      <button class="btn sm" onclick="window.print()"><i class="ti ti-printer"></i>Imprimir</button>
+      <button class="btn sm" onclick="window.print()"><i class="ti ti-printer"></i>Imprimir lista</button>
       <button class="btn primary" onclick="openNovaVenda()"><i class="ti ti-plus"></i>Nova venda</button>
     </div>
   </div>
@@ -972,19 +1054,27 @@ function renderCobrancas(){
   // - tinha contrato ativo nesse mês (inicio <= mesRef E fim >= mesRef)
   // - não é o mês de início (nesse mês recebe aluguel cheio)
   function contratoAtivoNoMes(im){
-    if(im.srv!=='administracao')return false;
+    if(!isAdmTipo(im.srv))return false;
     if(!im.inicioContrato)return false;
-    const ini=new Date(im.inicioContrato);
-    // Não mostrar no mês de início
     const[iy,im2]=im.inicioContrato.split('-').map(Number);
+    const ini=new Date(im.inicioContrato);
+
+    // Administração Parcial: só aparece no mês de aniversário (mesmo mês do início, todo ano)
+    if(im.srv==='adm_parcial'||im.srv==='adm_parcial_parceria'){
+      if(im2!==curM)return false; // só no mês do aniversário
+      if(ini>mesRef)return false;
+      if(im.fimContrato){
+        const fimMes=new Date(new Date(im.fimContrato).getFullYear(),new Date(im.fimContrato).getMonth(),1);
+        if(fimMes<mesRef)return false;
+      }
+      return true;
+    }
+
+    // Administração Completa/Parceria: todo mês exceto o mês de início
     if(iy===curY&&im2===curM)return false;
-    // Contrato deve ter começado antes do mês
     if(ini>mesRef)return false;
-    // Se tem fim de contrato, deve ser >= mesRef
     if(im.fimContrato){
-      const fim=new Date(im.fimContrato);
-      // Fim deve ser no mesmo mês ou depois
-      const fimMes=new Date(fim.getFullYear(),fim.getMonth(),1);
+      const fimMes=new Date(new Date(im.fimContrato).getFullYear(),new Date(im.fimContrato).getMonth(),1);
       if(fimMes<mesRef)return false;
     }
     return true;
@@ -1019,8 +1109,14 @@ function renderCobrancas(){
   const q=(searchQ['cobrancas']||'').toLowerCase();
   const list=admAtivos.filter(im=>!q||[im.nome,im.proprietario,im.inquilino].some(v=>v&&v.toLowerCase().includes(q)));
   const getKey=im=>im._histKey||chaveAdm(im.id,curY,curM);
-  const totalMes=admAtivos.reduce((s,im)=>s+(im._aluguelRef||0)*.1,0);
-  const totalPago=admAtivos.filter(im=>isPago(im.id,curY,curM)||(im._histKey&&data.pagamentos&&data.pagamentos[im._histKey])).reduce((s,im)=>s+(im._aluguelRef||0)*.1,0);
+  function taxaAdm(im){
+    const srv2=im.srv||'adm_completa';
+    if(srv2==='adm_parcial')return(im._aluguelRef||0);
+    if(srv2==='adm_parcial_parceria')return(im._aluguelRef||0)*.5;
+    return(im._aluguelRef||0)*.1;
+  }
+  const totalMes=admAtivos.reduce((s,im)=>s+taxaAdm(im),0);
+  const totalPago=admAtivos.filter(im=>isPago(im.id,curY,curM)||(im._histKey&&data.pagamentos&&data.pagamentos[im._histKey])).reduce((s,im)=>s+taxaAdm(im),0);
   const totalPendente=totalMes-totalPago;
   const isPagoItem=im=>im._histKey?(data.pagamentos&&!!data.pagamentos[im._histKey]):(isPago(im.id,curY,curM));
   const getDataPag=im=>{const k=im._histKey||chaveAdm(im.id,curY,curM);return data.pagamentos&&data.pagamentos[k]?.data;};
