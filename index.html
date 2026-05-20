@@ -1021,6 +1021,15 @@ function openEditVenda(id){
 }
 function addParcela(){Venda.parcelas.push({mes:'',valor:''});renderModalVenda();}
 function removeParcela(i){if(Venda.parcelas.length>1)Venda.parcelas.splice(i,1);renderModalVenda();}
+function getMesParcela(val){if(!val)return{m:'',y:''};const[y,m]=val.split('-');return{m:parseInt(m),y:parseInt(y)};}
+function setMesParcela(i,m,y){
+  if(m&&y){Venda.parcelas[i].mes=`${y}-${String(m).padStart(2,'0')}`;}
+  else{Venda.parcelas[i].mes='';}
+  // Atualizar preview sem re-renderizar o modal todo
+  const sel=document.getElementById(`parc_mes_${i}`);
+  const selY=document.getElementById(`parc_ano_${i}`);
+  if(sel&&selY){const mv=parseInt(sel.value),yv=parseInt(selY.value);if(mv&&yv)Venda.parcelas[i].mes=`${yv}-${String(mv).padStart(2,'0')}`;else Venda.parcelas[i].mes='';}
+}
 function renderModalVenda(){
   document.getElementById('modal').innerHTML=`
   <h2><i class="ti ti-home-dollar"></i> ${editVendaId?'Editar venda':'Nova venda'}</h2>
@@ -1033,7 +1042,17 @@ function renderModalVenda(){
   <div style="margin-bottom:10px">
     ${Venda.parcelas.map((p,i)=>`
     <div class="fg" style="margin-bottom:8px;align-items:center">
-      <div class="form-row" style="margin-bottom:0"><label>Mês da parcela ${i+1}</label><input type="month" value="${p.mes||''}" onchange="Venda.parcelas[${i}].mes=this.value"></div>
+      <div class="form-row" style="margin-bottom:0"><label>Mês da parcela ${i+1}</label>
+      <div style="display:flex;gap:6px">
+        <select id="parc_mes_${i}" onchange="setMesParcela(${i})" style="flex:1;padding:8px 6px;font-size:13px;border:0.5px solid var(--border2);border-radius:var(--r);background:var(--bg);color:var(--text)">
+          <option value="">Mês</option>
+          ${MESES_FULL.map((mn,mi)=>`<option value="${mi+1}"${p.mes&&parseInt(p.mes.split('-')[1])===mi+1?' selected':''}>${mn}</option>`).join('')}
+        </select>
+        <select id="parc_ano_${i}" onchange="setMesParcela(${i})" style="width:90px;padding:8px 6px;font-size:13px;border:0.5px solid var(--border2);border-radius:var(--r);background:var(--bg);color:var(--text)">
+          <option value="">Ano</option>
+          ${(()=>{const y=new Date().getFullYear();const opts=[];for(let yr=y-2;yr<=y+10;yr++)opts.push(`<option value="${yr}"${p.mes&&parseInt(p.mes.split('-')[0])===yr?' selected':''}>${yr}</option>`);return opts.join('');})()}
+        </select>
+      </div></div>
       <div class="form-row" style="margin-bottom:0"><label>Valor (R$)</label><input type="number" min="0" step="0.01" value="${p.valor||''}" placeholder="0,00" oninput="Venda.parcelas[${i}].valor=this.value"></div>
       ${Venda.parcelas.length>1?`<button class="icon-btn del" onclick="removeParcela(${i})" style="margin-top:18px;flex-shrink:0"><i class="ti ti-trash"></i></button>`:'<div style="width:28px"></div>'}
     </div>`).join('')}
@@ -1292,6 +1311,20 @@ function dpNextMonth(){const{y,m}=dpOpen;dpOpen={...dpOpen,y:m===12?y+1:y,m:m===
 function dpSelectDay(y,m,d,altY){
   const fy=altY||y;
   const iso=`${fy}-${String(m).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
+  if(!dpOpen)return;
+  // Pagamento
+  if(dpOpen.field==='_pag'){
+    _dpPagIso=iso;
+    const inp=document.getElementById('dataPagInput');if(inp)inp.value=isoToDisp(iso);
+    dpClose();return;
+  }
+  // Renovação
+  if(dpOpen.field==='renIni'||dpOpen.field==='renFim'){
+    if(dpOpen.field==='renIni')Ren.inicioContrato=iso;else Ren.fimContrato=iso;
+    const inp=document.getElementById('dp-inp-'+dpOpen.field);if(inp)inp.value=isoToDisp(iso);
+    dpClose();return;
+  }
+  // Campo normal do formulário F
   F[dpOpen.field]=iso;
   const inp=document.getElementById('dp-inp-'+dpOpen.field);
   if(inp)inp.value=isoToDisp(iso);
@@ -1334,13 +1367,6 @@ function dpOpenRen(field){
   dpOpen={field,y,m,mode:'day'};
   const popup=document.createElement('div');popup.id='dp-cal-popup';popup.className='dp-cal';
   existing.closest('.dp-wrap').appendChild(popup);dpRender();
-  const orig=dpSelectDay;
-  dpOpen._onSelect=(y2,m2,d2)=>{
-    const iso2=`${y2}-${String(m2).padStart(2,'0')}-${String(d2).padStart(2,'0')}`;
-    if(field==='renIni')Ren.inicioContrato=iso2;else Ren.fimContrato=iso2;
-    const inp=document.getElementById('dp-inp-'+field);if(inp)inp.value=isoToDisp(iso2);
-    dpClose();
-  };
   setTimeout(()=>document.addEventListener('click',dpOutsideClick,{once:true}),10);
 }
 let _dpPagIso='';
@@ -1355,19 +1381,7 @@ function dpOpenPag(){
   setTimeout(()=>document.addEventListener('click',dpOutsideClick,{once:true}),10);
 }
 
-// Override dpSelectDay para suportar renovação e pagamento
-const _dpSelectDayOrig=dpSelectDay;
-function dpSelectDay(y,m,d,altY){
-  const fy=altY||y;
-  const iso=`${fy}-${String(m).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
-  if(dpOpen&&dpOpen.field==='_pag'){
-    _dpPagIso=iso;
-    const inp=document.getElementById('dataPagInput');if(inp)inp.value=isoToDisp(iso);
-    dpClose();return;
-  }
-  if(dpOpen&&dpOpen._onSelect){dpOpen._onSelect(fy,m,d);return;}
-  _dpSelectDayOrig(y,m,d,altY);
-}
+
 
 /* ── Formato de data ── */
 function fixDateLocale(){
