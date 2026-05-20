@@ -137,6 +137,28 @@ tbody tr:hover td{background:var(--bg2)}
 .spin{display:inline-block;animation:spin 1s linear infinite}
 @keyframes spin{to{transform:rotate(360deg)}}
 .pg-load{min-height:60vh;display:flex;align-items:center;justify-content:center;flex-direction:column;gap:12px;color:var(--text2);font-size:14px}
+/* ── Datepicker ── */
+.dp-wrap{position:relative;display:inline-block;width:100%}
+.dp-input{width:100%;padding:9px 11px;font-size:13px;border:0.5px solid var(--border2);border-radius:var(--r);background:var(--bg);color:var(--text);cursor:pointer;user-select:none}
+.dp-input:focus{outline:none;border-color:var(--text2)}
+.dp-cal{position:absolute;top:calc(100% + 4px);left:0;z-index:300;background:var(--bg);border:0.5px solid var(--border2);border-radius:var(--rl);box-shadow:0 8px 24px rgba(0,0,0,.18);padding:12px;min-width:260px}
+.dp-cal-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px}
+.dp-cal-header span{font-size:13px;font-weight:600;cursor:pointer;padding:4px 8px;border-radius:var(--r)}
+.dp-cal-header span:hover{background:var(--bg2)}
+.dp-nav{background:none;border:none;cursor:pointer;color:var(--text2);padding:4px 8px;border-radius:var(--r);font-size:16px}
+.dp-nav:hover{background:var(--bg2);color:var(--text)}
+.dp-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:2px}
+.dp-dow{font-size:10px;font-weight:600;color:var(--text2);text-align:center;padding:4px 0}
+.dp-day{font-size:12px;text-align:center;padding:5px 2px;border-radius:4px;cursor:pointer;border:none;background:none;color:var(--text);min-width:32px}
+.dp-day:hover{background:var(--bg2)}
+.dp-day.today{font-weight:700;color:var(--text)}
+.dp-day.selected{background:var(--text);color:var(--bg)!important;font-weight:600}
+.dp-day.other{color:var(--text3)}
+.dp-day:disabled{opacity:.3;cursor:default}
+.dp-yms{display:grid;grid-template-columns:repeat(3,1fr);gap:6px;margin-top:4px}
+.dp-ym-btn{font-size:12px;padding:6px 4px;border-radius:var(--r);border:0.5px solid var(--border);background:var(--bg);color:var(--text);cursor:pointer;text-align:center}
+.dp-ym-btn:hover{background:var(--bg2)}
+.dp-ym-btn.selected{background:var(--text);color:var(--bg);border-color:var(--text)}
 @media print{
   body{background:#fff;color:#000}
   .shell{max-width:100%;padding:0}
@@ -368,89 +390,102 @@ function maskDate(el,field){let v=el.value.replace(/\D/g,'');if(v.length>2)v=v.s
 // inter_parcial        → 25%  1º aluguel na assinatura
 // adm_completa         → 100% 1º aluguel na assinatura + 10%/mês a partir do 2º mês
 // adm_parceria         → 50%  1º aluguel na assinatura + 10%/mês a partir do 2º mês
-// adm_parcial          → 100% 1º aluguel todo ano no mês de início
-// adm_parcial_parceria → 50%  1º aluguel todo ano no mês de início
+// adm_parcial          → 100% do aluguel todo ano no mês de início (ano atual e seguintes)
+// adm_parcial_parceria → 50%  do aluguel todo ano no mês de início (ano atual e seguintes)
 
 function recDoMes(im,y,m){
   if(im.status!=='Alugado')return{tipo:null,val:0,det:''};
   const a=im.aluguel||0;
   const srv=im.srv||'inter_completa';
-  const mesRef=new Date(y,m-1,1);
 
-  // Verificar se é o mês de assinatura (contrato atual ou renovação)
-  let assina=false;
+  // Extrair mês e ano de início do contrato
   let mesInicioMes=null,mesInicioAno=null;
   if(im.inicioContrato){
-    const[iy,im2]=im.inicioContrato.split('-').map(Number);
-    mesInicioMes=im2;mesInicioAno=iy;
-    if(iy===y&&im2===m)assina=true;
+    const p=im.inicioContrato.split('-').map(Number);
+    mesInicioAno=p[0]; mesInicioMes=p[1];
   }
-  if(!assina&&im.historico){
+
+  // Verificar se é o mês de assinatura (contrato atual)
+  let assina=false;
+  if(mesInicioAno===y && mesInicioMes===m) assina=true;
+  // Ou renovação
+  if(!assina && im.historico){
     for(const h of im.historico){
       if(h.inicioContrato){
-        const[hy,hm]=h.inicioContrato.split('-').map(Number);
-        if(hy===y&&hm===m){assina=true;break;}
+        const p=h.inicioContrato.split('-').map(Number);
+        if(p[0]===y && p[1]===m){assina=true;break;}
       }
     }
   }
 
-  // Verificar se contrato está ativo neste mês
+  // Verificar se contrato está ativo no mês y/m (comparação só por ano/mês)
   function contratoAtivo(){
-    if(!im.inicioContrato)return false;
-    const ini=new Date(im.inicioContrato);
-    if(mesRef<ini)return false;
-    if(im.fimContrato&&mesRef>new Date(im.fimContrato))return false;
+    if(!mesInicioAno)return false;
+    // Contrato começa antes ou no mês consultado
+    if(mesInicioAno>y || (mesInicioAno===y && mesInicioMes>m))return false;
+    // Contrato termina depois ou no mês consultado
+    if(im.fimContrato){
+      const fp=im.fimContrato.split('-').map(Number);
+      if(fp[0]<y || (fp[0]===y && fp[1]<m))return false;
+    }
     return true;
   }
 
   // ── INTERMEDIAÇÕES ──
   if(srv==='inter_completa'||srv==='intermediacao'){
-    if(assina)return{tipo:'loc',val:a,det:'1º aluguel — Intermediação completa (100%)'};
+    if(assina)return{tipo:'loc',val:a,det:'1º aluguel — Intermediação Completa (100%)'};
     return{tipo:null,val:0,det:''};
   }
   if(srv==='inter_parceria'){
-    if(assina)return{tipo:'loc',val:a*.5,det:`Intermediação com parceria (50% de ${fR(a)})`};
+    if(assina)return{tipo:'loc',val:a*.5,det:`Intermediação com Parceria (50% de ${fR(a)})`};
     return{tipo:null,val:0,det:''};
   }
   if(srv==='inter_parcial'){
-    if(assina)return{tipo:'loc',val:a*.25,det:`Intermediação parcial (25% de ${fR(a)})`};
+    if(assina)return{tipo:'loc',val:a*.25,det:`Intermediação Parcial (25% de ${fR(a)})`};
     return{tipo:null,val:0,det:''};
   }
 
-  // ── ADMINISTRAÇÕES ──
+  // ── ADMINISTRAÇÃO COMPLETA ──
   if(srv==='adm_completa'||srv==='administracao'){
-    if(assina)return{tipo:'loc',val:a,det:'1º aluguel — Administração completa (100%)'};
-    if(contratoAtivo()&&!assina){
-      const ini=new Date(im.inicioContrato);
-      if(mesRef>ini)return{tipo:'adm-m',val:a*.1,det:`10% de ${fR(a)} — Administração`};
+    if(assina)return{tipo:'loc',val:a,det:'1º aluguel — Administração Completa (100%)'};
+    if(contratoAtivo()){
+      // A partir do 2º mês: 10%
+      const iniDepois=mesInicioAno<y||(mesInicioAno===y&&mesInicioMes<m);
+      if(iniDepois)return{tipo:'adm-m',val:a*.1,det:`10% do aluguel — Administração Completa`};
     }
     return{tipo:null,val:0,det:''};
   }
+
+  // ── ADMINISTRAÇÃO COMPLETA COM PARCERIA ──
   if(srv==='adm_parceria'){
-    if(assina)return{tipo:'loc',val:a*.5,det:`50% do 1º aluguel — Administração com parceria`};
-    if(contratoAtivo()&&!assina){
-      const ini=new Date(im.inicioContrato);
-      if(mesRef>ini)return{tipo:'adm-m',val:a*.1,det:`10% de ${fR(a)} — Administração`};
+    if(assina)return{tipo:'loc',val:a*.5,det:`50% do 1º aluguel — Administração com Parceria`};
+    if(contratoAtivo()){
+      const iniDepois=mesInicioAno<y||(mesInicioAno===y&&mesInicioMes<m);
+      if(iniDepois)return{tipo:'adm-m',val:a*.1,det:`10% do aluguel — Administração com Parceria`};
     }
     return{tipo:null,val:0,det:''};
   }
+
+  // ── ADMINISTRAÇÃO PARCIAL ──
+  // Recebe 100% do aluguel todo ano no mês de início do contrato
+  // Ex: contrato iniciou em maio 2024 → recebe todo mês de maio (2024, 2025, 2026...) até o fim
   if(srv==='adm_parcial'){
-    // Recebe 100% do 1º aluguel todo ano no mês de início do contrato
     if(!mesInicioMes)return{tipo:null,val:0,det:''};
-    if(m===mesInicioMes&&contratoAtivo()){
-      
-      return{tipo:'loc',val:a,det:`1º aluguel — Administração parcial (100% anual)`};
+    if(m===mesInicioMes && contratoAtivo()){
+      return{tipo:'loc',val:a,det:'100% do aluguel — Administração Parcial (anual)'};
     }
     return{tipo:null,val:0,det:''};
   }
+
+  // ── ADMINISTRAÇÃO PARCIAL COM PARCERIA ──
   if(srv==='adm_parcial_parceria'){
     if(!mesInicioMes)return{tipo:null,val:0,det:''};
-    if(m===mesInicioMes&&contratoAtivo()){
-      
-      return{tipo:'loc',val:a*.5,det:`1º aluguel — Administração parcial com parceria (50% anual)`};
+    if(m===mesInicioMes && contratoAtivo()){
+      return{tipo:'loc',val:a*.5,det:`50% do aluguel — Administração Parcial com Parceria (anual)`};
     }
     return{tipo:null,val:0,det:''};
   }
+
   return{tipo:null,val:0,det:''};
 }
 
@@ -494,7 +529,7 @@ function togglePagoKey(key,imId,y,m){
     ${esc((data.imoveis.find(i=>i.id===imId)||{}).nome||'')} — ${MESES[m-1]} ${y}
   </div>
   <div class="form-row"><label>Data em que o pagamento foi recebido</label>
-    <input type="date" id="dataPagInput" value="${hoje}" style="width:100%;padding:9px 11px;font-size:13px;border:0.5px solid var(--border2);border-radius:var(--r);background:var(--bg);color:var(--text)">
+    <div class="dp-wrap"><input id="dataPagInput" class="dp-input" readonly value="${isoToDisp(hoje)}" placeholder="dd/mm/aaaa" onclick="dpOpenPag()"></div>
   </div>
   <div class="modal-foot">
     <button class="btn ghost" onclick="closeModal()">Cancelar</button>
@@ -503,7 +538,7 @@ function togglePagoKey(key,imId,y,m){
   fixDateLocale();
 }
 async function confirmarPagamentoKey(key){
-  const dataSel=document.getElementById('dataPagInput')?.value||new Date().toISOString().split('T')[0];
+  const rawVal=document.getElementById('dataPagInput')?.value||'';const dataSel=_dpPagIso||dispToIso(rawVal)||new Date().toISOString().split('T')[0];
   if(!data.pagamentos)data.pagamentos={};
   data.pagamentos[key]={pago:true,data:dataSel};
   closeModal();
@@ -527,7 +562,7 @@ function togglePago(imId,y,m){
     ${esc((data.imoveis.find(i=>i.id===imId)||{}).nome||'')} — ${MESES[m-1]}
   </div>
   <div class="form-row"><label>Data em que o pagamento foi recebido</label>
-    <input type="date" id="dataPagInput" value="${hoje}" style="width:100%;padding:9px 11px;font-size:13px;border:0.5px solid var(--border2);border-radius:var(--r);background:var(--bg);color:var(--text)">
+    <div class="dp-wrap"><input id="dataPagInput" class="dp-input" readonly value="${isoToDisp(hoje)}" placeholder="dd/mm/aaaa" onclick="dpOpenPag()"></div>
   </div>
   <div class="modal-foot">
     <button class="btn ghost" onclick="closeModal()">Cancelar</button>
@@ -537,7 +572,7 @@ function togglePago(imId,y,m){
 }
 async function confirmarPagamento(imId,y,m){
   const k=chaveAdm(imId,y,m);
-  const dataSel=document.getElementById('dataPagInput')?.value||new Date().toISOString().split('T')[0];
+  const rawVal=document.getElementById('dataPagInput')?.value||'';const dataSel=_dpPagIso||dispToIso(rawVal)||new Date().toISOString().split('T')[0];
   if(!data.pagamentos)data.pagamentos={};
   data.pagamentos[k]={pago:true,data:dataSel};
   closeModal();
@@ -632,8 +667,8 @@ function renderModalRenovacao(im){
   </div>
   <div class="slbl">Novo período</div>
   <div class="fg">
-    <div class="form-row"><label>Início da renovação</label><input type="date" value="${Ren.inicioContrato}" onchange="Ren.inicioContrato=this.value"></div>
-    <div class="form-row"><label>Novo vencimento</label><input type="date" value="${Ren.fimContrato}" onchange="Ren.fimContrato=this.value"></div>
+    <div class="form-row"><label>Início da renovação</label><div class="dp-wrap"><input id="dp-inp-renIni" class="dp-input" readonly value="${Ren.inicioContrato?isoToDisp(Ren.inicioContrato):''}" placeholder="dd/mm/aaaa" onclick="dpOpenRen('renIni')"></div></div>
+    <div class="form-row"><label>Novo vencimento</label><div class="dp-wrap"><input id="dp-inp-renFim" class="dp-input" readonly value="${Ren.fimContrato?isoToDisp(Ren.fimContrato):''}" placeholder="dd/mm/aaaa" onclick="dpOpenRen('renFim')"></div></div>
   </div>
   <div class="slbl">Valores</div>
   <div class="form-row"><label>Novo valor do aluguel (R$)</label>
@@ -809,12 +844,12 @@ function renderModal(){
   </div>
   <div class="slbl">Contrato &amp; IPTU</div>
   <div class="fg">
-    <div class="form-row"><label>Início do contrato</label><input type="date" value="${F.inicioContrato||''}" onchange="F.inicioContrato=this.value"></div>
-    <div class="form-row"><label>Vencimento do contrato</label><input type="date" value="${F.fimContrato||''}" onchange="F.fimContrato=this.value"></div>
+    <div class="form-row"><label>Início do contrato</label>${dpInput('inicioContrato','dd/mm/aaaa')}</div>
+    <div class="form-row"><label>Vencimento do contrato</label>${dpInput('fimContrato','dd/mm/aaaa')}</div>
   </div>
   <div class="fg">
     <div class="form-row"><label>IPTU anual (R$)</label><input type="number" min="0" step="0.01" value="${F.iptuAnual}" placeholder="0,00" oninput="F.iptuAnual=this.value"></div>
-    <div class="form-row"><label>Vencimento IPTU</label><input type="date" value="${F.iptuVenc||''}" onchange="F.iptuVenc=this.value"></div>
+    <div class="form-row"><label>Vencimento IPTU</label>${dpInput('iptuVenc','dd/mm/aaaa')}</div>
   </div>
   <div class="modal-foot">
     <button class="btn ghost" onclick="closeModal()">Cancelar</button>
@@ -1181,6 +1216,159 @@ function renderCobrancas(){
       </tr>`;}).join('')}</tbody></table>`}
   </div>`;
 }
+/* ── Datepicker ── */
+const MESES_FULL=['Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'];
+const DIAS_SEMANA=['Dom','Seg','Ter','Qua','Qui','Sex','Sáb'];
+
+let dpOpen=null; // {field, y, m, mode:'day'|'month'|'year'}
+
+function isoToDisp(iso){if(!iso)return'';const[y,m,d]=iso.split('-');return`${d}/${m}/${y}`;}
+function dispToIso(disp){if(!disp||disp.length<10)return'';const[d,m,y]=disp.split('/');return(y&&m&&d&&y.length===4)?`${y}-${m.padStart(2,'0')}-${d.padStart(2,'0')}`:''}
+
+function dpRender(){
+  const el=document.getElementById('dp-cal-popup');
+  if(!el||!dpOpen)return;
+  const{field,y,m,mode}=dpOpen;
+  const today=new Date();
+  const todayY=today.getFullYear(),todayM=today.getMonth()+1,todayD=today.getDate();
+  const curVal=F[field]||'';
+  let selY=null,selM=null,selD=null;
+  if(curVal){const p=curVal.split('-').map(Number);selY=p[0];selM=p[1];selD=p[2];}
+
+  if(mode==='year'){
+    const startY=y-6;
+    let html=`<div class="dp-cal-header">
+      <button class="dp-nav" onclick="dpOpen={...dpOpen,year:dpOpen.y-12};dpRender()"><i class='ti ti-chevron-left'></i></button>
+      <span>${startY}–${startY+11}</span>
+      <button class="dp-nav" onclick="dpOpen={...dpOpen,year:dpOpen.y+12};dpRender()"><i class='ti ti-chevron-right'></i></button>
+    </div><div class="dp-yms">`;
+    for(let yr=startY;yr<startY+12;yr++){
+      html+=`<button class="dp-ym-btn${selY===yr?' selected':''}" onclick="dpOpen={...dpOpen,y:${yr},mode:'month'};dpRender()">${yr}</button>`;
+    }
+    html+='</div>';
+    el.innerHTML=html;return;
+  }
+
+  if(mode==='month'){
+    let html=`<div class="dp-cal-header">
+      <button class="dp-nav" onclick="dpOpen={...dpOpen,mode:'year'};dpRender()"><i class='ti ti-chevron-left'></i></button>
+      <span onclick="dpOpen={...dpOpen,mode:'year'};dpRender()">${y}</span>
+      <span></span>
+    </div><div class="dp-yms">`;
+    MESES_FULL.forEach((mn,i)=>{
+      html+=`<button class="dp-ym-btn${selM===i+1&&selY===y?' selected':''}" onclick="dpOpen={...dpOpen,m:${i+1},mode:'day'};dpRender()">${mn.slice(0,3)}</button>`;
+    });
+    html+='</div>';
+    el.innerHTML=html;return;
+  }
+
+  // mode === day
+  const firstDay=new Date(y,m-1,1).getDay();
+  const daysInMonth=new Date(y,m,0).getDate();
+  const prevDays=new Date(y,m-1,0).getDate();
+
+  let html=`<div class="dp-cal-header">
+    <button class="dp-nav" onclick="dpPrevMonth()"><i class='ti ti-chevron-left'></i></button>
+    <span onclick="dpOpen={...dpOpen,mode:'month'};dpRender()">${MESES_FULL[m-1]} ${y}</span>
+    <button class="dp-nav" onclick="dpNextMonth()"><i class='ti ti-chevron-right'></i></button>
+  </div><div class="dp-grid">`;
+  DIAS_SEMANA.forEach(d=>html+=`<div class="dp-dow">${d}</div>`);
+  for(let i=0;i<firstDay;i++){html+=`<button class="dp-day other" onclick="dpSelectDay(${y},${m===1?m-1+12:m-1},${prevDays-firstDay+1+i},${m===1?y-1:y})">${prevDays-firstDay+1+i}</button>`;}
+  for(let d=1;d<=daysInMonth;d++){
+    const isToday=d===todayD&&m===todayM&&y===todayY;
+    const isSel=d===selD&&m===selM&&y===selY;
+    html+=`<button class="dp-day${isToday?' today':''}${isSel?' selected':''}" onclick="dpSelectDay(${y},${m},${d})">${d}</button>`;
+  }
+  let nextD=1;
+  const cells=firstDay+daysInMonth;
+  const rem=cells%7===0?0:7-(cells%7);
+  for(let i=0;i<rem;i++){html+=`<button class="dp-day other" onclick="dpSelectDay(${y},${m===12?1:m+1},${nextD++},${m===12?y+1:y})">${nextD-1}</button>`;}
+  html+='</div>';
+  el.innerHTML=html;
+}
+
+function dpPrevMonth(){const{y,m}=dpOpen;dpOpen={...dpOpen,y:m===1?y-1:y,m:m===1?12:m-1};dpRender();}
+function dpNextMonth(){const{y,m}=dpOpen;dpOpen={...dpOpen,y:m===12?y+1:y,m:m===12?1:m+1};dpRender();}
+function dpSelectDay(y,m,d,altY){
+  const fy=altY||y;
+  const iso=`${fy}-${String(m).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
+  F[dpOpen.field]=iso;
+  const inp=document.getElementById('dp-inp-'+dpOpen.field);
+  if(inp)inp.value=isoToDisp(iso);
+  dpClose();updPrev();
+}
+function dpClose(){dpOpen=null;const el=document.getElementById('dp-cal-popup');if(el)el.remove();}
+function dpOpen2(field){
+  // Fechar qualquer aberto
+  dpClose();
+  const existing=document.getElementById('dp-inp-'+field);
+  if(!existing)return;
+  const iso=F[field]||'';
+  const today=new Date();
+  let y=today.getFullYear(),m=today.getMonth()+1;
+  if(iso){const p=iso.split('-').map(Number);y=p[0];m=p[1];}
+  dpOpen={field,y,m,mode:'day'};
+  const popup=document.createElement('div');
+  popup.id='dp-cal-popup';popup.className='dp-cal';
+  existing.closest('.dp-wrap').appendChild(popup);
+  dpRender();
+  setTimeout(()=>document.addEventListener('click',dpOutsideClick,{once:true}),10);
+}
+function dpOutsideClick(e){if(!e.target.closest('.dp-cal')&&!e.target.closest('.dp-wrap'))dpClose();}
+
+function dpInput(field,placeholder){
+  const val=F[field]?isoToDisp(F[field]):'';
+  return`<div class="dp-wrap">
+    <input id="dp-inp-${field}" class="dp-input" readonly value="${val}" placeholder="${placeholder}" onclick="dpOpen2('${field}')">
+    <div id="dp-cal-popup-${field}"></div>
+  </div>`;
+}
+
+/* ── dpOpen para renovação e pagamento ── */
+function dpOpenRen(field){
+  const existing=document.getElementById('dp-inp-'+field);if(!existing)return;
+  dpClose();
+  const iso=field==='renIni'?Ren.inicioContrato:Ren.fimContrato;
+  const today=new Date();let y=today.getFullYear(),m=today.getMonth()+1;
+  if(iso){const p=iso.split('-').map(Number);y=p[0];m=p[1];}
+  dpOpen={field,y,m,mode:'day'};
+  const popup=document.createElement('div');popup.id='dp-cal-popup';popup.className='dp-cal';
+  existing.closest('.dp-wrap').appendChild(popup);dpRender();
+  const orig=dpSelectDay;
+  dpOpen._onSelect=(y2,m2,d2)=>{
+    const iso2=`${y2}-${String(m2).padStart(2,'0')}-${String(d2).padStart(2,'0')}`;
+    if(field==='renIni')Ren.inicioContrato=iso2;else Ren.fimContrato=iso2;
+    const inp=document.getElementById('dp-inp-'+field);if(inp)inp.value=isoToDisp(iso2);
+    dpClose();
+  };
+  setTimeout(()=>document.addEventListener('click',dpOutsideClick,{once:true}),10);
+}
+let _dpPagIso='';
+function dpOpenPag(){
+  const existing=document.getElementById('dataPagInput');if(!existing)return;
+  dpClose();
+  const iso=_dpPagIso||new Date().toISOString().split('T')[0];
+  const p=iso.split('-').map(Number);
+  dpOpen={field:'_pag',y:p[0],m:p[1],mode:'day'};
+  const popup=document.createElement('div');popup.id='dp-cal-popup';popup.className='dp-cal';
+  existing.closest('.dp-wrap').appendChild(popup);dpRender();
+  setTimeout(()=>document.addEventListener('click',dpOutsideClick,{once:true}),10);
+}
+
+// Override dpSelectDay para suportar renovação e pagamento
+const _dpSelectDayOrig=dpSelectDay;
+function dpSelectDay(y,m,d,altY){
+  const fy=altY||y;
+  const iso=`${fy}-${String(m).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
+  if(dpOpen&&dpOpen.field==='_pag'){
+    _dpPagIso=iso;
+    const inp=document.getElementById('dataPagInput');if(inp)inp.value=isoToDisp(iso);
+    dpClose();return;
+  }
+  if(dpOpen&&dpOpen._onSelect){dpOpen._onSelect(fy,m,d);return;}
+  _dpSelectDayOrig(y,m,d,altY);
+}
+
 /* ── Formato de data ── */
 function fixDateLocale(){
   setTimeout(()=>{
