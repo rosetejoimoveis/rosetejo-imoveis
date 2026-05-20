@@ -739,6 +739,13 @@ function renderDashboard(){
   const recMesAtual=data.imoveis.reduce((s,im)=>s+recDoMes(im,curY,curM).val,0)+recVendasDoMes(curY,curM).total;
   const mesLabel=MESES[curM-1];
   return`
+  <div class="print-header">
+    <h2>Gestão Financeira Rose Tejo Imóveis — Visão Geral</h2>
+    <p>Gerado em ${new Date().toLocaleDateString('pt-BR')}</p>
+  </div>
+  <div style="display:flex;justify-content:flex-end;margin-bottom:12px" class="no-print">
+    <button class="btn sm" onclick="window.print()"><i class="ti ti-printer"></i>Imprimir</button>
+  </div>
   <div class="metrics">
     <div class="metric"><div class="ml"><i class="ti ti-building"></i>Imóveis</div><div class="mv">${data.imoveis.length}</div><div class="ms">${alugados.length} alugado${alugados.length!==1?'s':''}</div></div>
     <div class="metric"><div class="ml"><i class="ti ti-cash"></i>Receita total — ${mesLabel}</div><div class="mv">${fR(recMesAtual)}</div><div class="ms">receita total do mês atual</div></div>
@@ -767,12 +774,17 @@ function renderReceita(){
   const tLoc=linhas.filter(l=>l.r.tipo==='inter'||l.r.tipo==='loc').reduce((s,l)=>s+l.r.val,0);
   const total=tAdm+tLoc;
   return`
-  <div class="month-bar">
+  <div class="month-bar no-print">
     <label><i class="ti ti-calendar"></i>Mês de referência</label>
     <button class="mnav" onclick="prevMonth()"><i class="ti ti-chevron-left"></i></button>
     <input type="month" value="${p2(y)}-${p2(m)}" onchange="setMonth(this.value)">
     <button class="mnav" onclick="nextMonth()"><i class="ti ti-chevron-right"></i></button>
     <span class="month-lbl">${MESES[m-1]} ${y}</span>
+    <button class="btn sm no-print" onclick="window.print()" style="margin-left:auto"><i class="ti ti-printer"></i>Imprimir</button>
+  </div>
+  <div class="print-header">
+    <h2>Receita por Mês — ${MESES[m-1]} ${y}</h2>
+    <p>Gerado em ${new Date().toLocaleDateString('pt-BR')}</p>
   </div>
   ${(()=>{const vd=recVendasDoMes(y,m);const tVenda=vd.total;const totalGeral=total+tVenda;return`
   <div class="metrics" style="grid-template-columns:repeat(3,1fr);margin-bottom:10px">
@@ -791,9 +803,16 @@ function renderReceita(){
 
 function renderImoveis(){
   return`
-  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">
+  <div class="print-header">
+    <h2>Imóveis</h2>
+    <p>Gerado em ${new Date().toLocaleDateString('pt-BR')} · Total: ${data.imoveis.length} imóvel${data.imoveis.length!==1?'s':''}</p>
+  </div>
+  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px" class="no-print">
     <span style="font-size:15px;font-weight:500">Imóveis (${data.imoveis.length})</span>
-    <button class="btn primary" onclick="openNew()"><i class="ti ti-plus"></i>Novo imóvel</button>
+    <div style="display:flex;gap:8px">
+      <button class="btn sm" onclick="window.print()"><i class="ti ti-printer"></i>Imprimir</button>
+      <button class="btn primary" onclick="openNew()"><i class="ti ti-plus"></i>Novo imóvel</button>
+    </div>
   </div>
   ${filterBar('imoveis')}
   <div class="card">
@@ -809,6 +828,13 @@ function renderContratos(){
   const allC=[...data.imoveis].filter(i=>i.fimContrato).sort((a,b)=>new Date(a.fimContrato)-new Date(b.fimContrato));
   const sorted=allC.filter(im=>matchSearch('contratos',im));
   return`
+  <div class="print-header">
+    <h2>Contratos — por vencimento</h2>
+    <p>Gerado em ${new Date().toLocaleDateString('pt-BR')} · ${allC.length} contrato${allC.length!==1?'s':''} cadastrado${allC.length!==1?'s':''}</p>
+  </div>
+  <div style="display:flex;justify-content:flex-end;margin-bottom:12px" class="no-print">
+    <button class="btn sm" onclick="window.print()"><i class="ti ti-printer"></i>Imprimir</button>
+  </div>
   ${filterBar('contratos')}
   <div class="card"><div class="card-hd"><span class="card-title">Contratos — por vencimento</span></div>${allC.length===0?`<div class="no-data"><i class="ti ti-file-off"></i>Nenhum contrato cadastrado</div>`:sorted.length===0?`<div class="no-data"><i class="ti ti-search"></i>Nenhum resultado encontrado.</div>`:`<table><thead><tr><th>Imóvel</th><th>Proprietário / Inquilino</th><th>Início</th><th>Vencimento</th><th>Prazo</th><th>Receita da imobiliária</th><th></th></tr></thead><tbody>${sorted.map(im=>{const d=dT(im.fimContrato),label=d<0?`Vencido há ${Math.abs(d)}d`:d===0?'Hoje':`${d}d`;const a=im.aluguel||0;const rec=im.status!=='Alugado'?'—':(im.srv==='administracao'?`${fR(a)} + ${fR(a*.1)}/mês (administração)`:`${fR(a)} — locação`);return`<tr><td><div class="tdname">${esc(im.nome)}</div><div class="tdsub">${bS(im)}</div></td><td style="font-size:12px"><div class="tdname">${esc(im.proprietario||'—')}</div><div class="tdsub">${esc(im.inquilino||'—')}</div></td><td style="font-size:12px">${fD(im.inicioContrato)}</td><td style="font-size:12px">${fD(im.fimContrato)}</td><td>${bC(im)} <span style="font-size:11px;color:var(--text2)">${label}</span></td><td style="font-size:12px;font-weight:500;white-space:nowrap">${rec}</td><td class="ac" style="white-space:nowrap"><button class="icon-btn" onclick="openRenovar(${im.id})" title="Renovar contrato" style="color:var(--s-text)"><i class="ti ti-refresh"></i></button><button class="icon-btn del" onclick="openEncerrar(${im.id})" title="Encerrar contrato"><i class="ti ti-door-exit"></i></button></td></tr>`;}).join('')}</tbody></table>`}</div>`;
 }
@@ -817,7 +843,15 @@ function renderIptu(){
   const allI=[...data.imoveis].filter(i=>i.iptuVenc).sort((a,b)=>new Date(a.iptuVenc)-new Date(b.iptuVenc));
   const sorted=allI.filter(im=>matchSearch('iptu',im));
   const total=data.imoveis.reduce((s,i)=>s+(i.iptuAnual||0),0);
-  return`${searchBox('iptu')}<div class="metrics"><div class="metric"><div class="ml"><i class="ti ti-receipt-2"></i>IPTU anual total</div><div class="mv">${fR(total)}</div></div><div class="metric"><div class="ml"><i class="ti ti-alert-triangle"></i>Vencimento próximo (≤30 dias)</div><div class="mv" style="color:var(--w-text)">${data.imoveis.filter(i=>stI(i)==='crit').length}</div></div></div><div class="card"><div class="card-hd"><span class="card-title">IPTU — por vencimento</span></div>${sorted.length===0?`<div class="no-data"><i class="ti ti-receipt-off"></i>${allI.length===0?'Nenhum IPTU cadastrado':'Nenhum resultado encontrado.'}</div>`:`<table><thead><tr><th>Imóvel</th><th>Proprietário</th><th>IPTU anual</th><th>Vencimento</th><th>Status</th></tr></thead><tbody>${sorted.map(im=>{const d=dT(im.iptuVenc),label=d===null?'':d<0?`Há ${Math.abs(d)}d`:d===0?'Hoje':`${d}d`;return`<tr><td><div class="tdname">${esc(im.nome)}</div><div class="tdsub">${esc(im.endereco||'')}</div></td><td style="font-size:12px">${esc(im.proprietario||'—')}</td><td style="font-size:12px">${im.iptuAnual?fR(im.iptuAnual):'—'}</td><td style="font-size:12px">${fD(im.iptuVenc)}</td><td>${bI(im)} <span style="font-size:11px;color:var(--text2)">${label}</span></td></tr>`;}).join('')}</tbody></table>`}</div>`;
+  return`
+  <div class="print-header">
+    <h2>IPTU — por vencimento</h2>
+    <p>Gerado em ${new Date().toLocaleDateString('pt-BR')} · Total anual: ${fR(total)}</p>
+  </div>
+  <div style="display:flex;justify-content:flex-end;margin-bottom:12px" class="no-print">
+    <button class="btn sm" onclick="window.print()"><i class="ti ti-printer"></i>Imprimir</button>
+  </div>
+  ${searchBox('iptu')}<div class="metrics"><div class="metric"><div class="ml"><i class="ti ti-receipt-2"></i>IPTU anual total</div><div class="mv">${fR(total)}</div></div><div class="metric"><div class="ml"><i class="ti ti-alert-triangle"></i>Vencimento próximo (≤30 dias)</div><div class="mv" style="color:var(--w-text)">${data.imoveis.filter(i=>stI(i)==='crit').length}</div></div></div><div class="card"><div class="card-hd"><span class="card-title">IPTU — por vencimento</span></div>${sorted.length===0?`<div class="no-data"><i class="ti ti-receipt-off"></i>${allI.length===0?'Nenhum IPTU cadastrado':'Nenhum resultado encontrado.'}</div>`:`<table><thead><tr><th>Imóvel</th><th>Proprietário</th><th>IPTU anual</th><th>Vencimento</th><th>Status</th></tr></thead><tbody>${sorted.map(im=>{const d=dT(im.iptuVenc),label=d===null?'':d<0?`Há ${Math.abs(d)}d`:d===0?'Hoje':`${d}d`;return`<tr><td><div class="tdname">${esc(im.nome)}</div><div class="tdsub">${esc(im.endereco||'')}</div></td><td style="font-size:12px">${esc(im.proprietario||'—')}</td><td style="font-size:12px">${im.iptuAnual?fR(im.iptuAnual):'—'}</td><td style="font-size:12px">${fD(im.iptuVenc)}</td><td>${bI(im)} <span style="font-size:11px;color:var(--text2)">${label}</span></td></tr>`;}).join('')}</tbody></table>`}</div>`;
 }
 
 function render(){
@@ -890,9 +924,16 @@ function renderVendas(){
   const list=(data.vendas||[]).filter(v=>matchSearchVenda(v));
   const totalGeral=(data.vendas||[]).reduce((s,v)=>s+v.valorTotal,0);
   return`
-  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">
+  <div class="print-header">
+    <h2>Vendas</h2>
+    <p>Gerado em ${new Date().toLocaleDateString('pt-BR')} · ${(data.vendas||[]).length} venda${(data.vendas||[]).length!==1?'s':''} cadastrada${(data.vendas||[]).length!==1?'s':''}</p>
+  </div>
+  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px" class="no-print">
     <span style="font-size:15px;font-weight:500">Vendas (${(data.vendas||[]).length})</span>
-    <button class="btn primary" onclick="openNovaVenda()"><i class="ti ti-plus"></i>Nova venda</button>
+    <div style="display:flex;gap:8px">
+      <button class="btn sm" onclick="window.print()"><i class="ti ti-printer"></i>Imprimir</button>
+      <button class="btn primary" onclick="openNovaVenda()"><i class="ti ti-plus"></i>Nova venda</button>
+    </div>
   </div>
   ${searchBox('vendas')}
   <div class="metrics-2">
