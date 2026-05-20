@@ -323,13 +323,36 @@ function setSearch(tab,v){searchQ[tab]=v.toLowerCase();render();const inp=docume
 function searchBox(tab){return`<div style="margin-bottom:14px"><input data-search="${tab}" type="text" placeholder="Pesquisar por imóvel, proprietário ou inquilino..." value="${esc(searchQ[tab])}" oninput="setSearch('${tab}',this.value)" style="width:100%;padding:9px 12px;font-size:13px;border:0.5px solid var(--border2);border-radius:var(--r);background:var(--bg);color:var(--text)"></div>`;}
 function filterBar(tab){
   const cur=srvFilter[tab]||'todos';
-  const btn=(v,lbl)=>`<button onclick="setSrv('${tab}','${v}')" style="padding:6px 14px;font-size:12px;font-weight:500;border-radius:var(--r);border:0.5px solid ${cur===v?'var(--border2)':'var(--border)'};background:${cur===v?'var(--text)':'var(--bg)'};color:${cur===v?'var(--bg)':'var(--text2)'};cursor:pointer">${lbl}</button>`;
+  const opts=[
+    {v:'todos',l:'Todos os serviços'},
+    {v:'inter_completa',l:'Intermediação Completa'},
+    {v:'inter_parceria',l:'Intermediação com Parceria'},
+    {v:'inter_parcial',l:'Intermediação Parcial'},
+    {v:'adm_completa',l:'Administração Completa'},
+    {v:'adm_parceria',l:'Administração com Parceria'},
+    {v:'adm_parcial',l:'Administração Parcial'},
+    {v:'adm_parcial_parceria',l:'Administração Parcial com Parceria'},
+  ];
   return`<div style="display:flex;gap:8px;align-items:center;margin-bottom:14px;flex-wrap:wrap">
     <input data-search="${tab}" type="text" placeholder="Pesquisar por imóvel, proprietário ou inquilino..." value="${esc(searchQ[tab])}" oninput="setSearch('${tab}',this.value)" style="flex:1;min-width:200px;padding:9px 12px;font-size:13px;border:0.5px solid var(--border2);border-radius:var(--r);background:var(--bg);color:var(--text)">
-    <div style="display:flex;gap:4px">${btn('todos','Todos')}${btn('administracao','Administração')}${btn('intermediacao','Intermediação')}</div>
+    <select onchange="setSrv('${tab}',this.value)" style="padding:9px 10px;font-size:13px;border:0.5px solid var(--border2);border-radius:var(--r);background:var(--bg);color:var(--text);min-width:220px">
+      ${opts.map(o=>`<option value="${o.v}"${cur===o.v?' selected':''}>${o.l}</option>`).join('')}
+    </select>
   </div>`;
 }
-function matchSearch(tab,im){const q=searchQ[tab];const srv=srvFilter[tab]||'todos';const matchTxt=!q||[im.nome,im.proprietario,im.inquilino].some(v=>v&&v.toLowerCase().includes(q));const matchSrv=srv==='todos'||im.srv===srv;return matchTxt&&matchSrv;}
+function matchSearch(tab,im){
+  const q=searchQ[tab];
+  const srv=srvFilter[tab]||'todos';
+  const matchTxt=!q||[im.nome,im.proprietario,im.inquilino].some(v=>v&&v.toLowerCase().includes(q));
+  let matchSrv=srv==='todos';
+  if(!matchSrv){
+    const imSrv=im.srv||'inter_completa';
+    // compatibilidade com valores antigos
+    const normalizado=imSrv==='intermediacao'?'inter_completa':imSrv==='administracao'?'adm_completa':imSrv;
+    matchSrv=normalizado===srv;
+  }
+  return matchTxt&&matchSrv;
+}
 
 /* ── Toast ── */
 let tTimer=null;
@@ -627,6 +650,34 @@ async function restoreAlerts(){data.dismissedAlerts=[];await persist();render();
 /* ── Badges ── */
 const bC=im=>{const s=stC(im);if(!s)return`<span class="badge neutral">Sem contrato</span>`;if(s==='exp')return`<span class="badge crit"><i class="ti ti-alert-circle"></i>Vencido</span>`;const d=dT(im.fimContrato);if(s==='crit')return`<span class="badge crit"><i class="ti ti-clock"></i>${d}d</span>`;return`<span class="badge ok"><i class="ti ti-check"></i>OK</span>`;};
 const bI=im=>{const s=stI(im);if(!s)return`<span class="badge neutral">—</span>`;if(s==='exp')return`<span class="badge crit">Vencido</span>`;const d=dT(im.iptuVenc);if(s==='crit')return`<span class="badge crit">${d}d</span>`;return`<span class="badge ok"><i class="ti ti-check"></i>OK</span>`;};
+function openDetalhe(id){
+  const im=data.imoveis.find(i=>i.id===id);
+  if(!im)return;
+  document.getElementById('overlay').style.display='flex';
+  const stC_lbl=()=>{const s=stC(im);if(!s)return'Sem contrato';if(s==='exp')return'<span class="badge crit">Vencido</span>';if(s==='crit'){return`<span class="badge crit">${dT(im.fimContrato)}d</span>`;}return'<span class="badge ok">OK</span>';};
+  const stI_lbl=()=>{const s=stI(im);if(!s)return'—';if(s==='exp')return'<span class="badge crit">Vencido</span>';if(s==='crit'){return`<span class="badge crit">${dT(im.iptuVenc)}d</span>`;}return'<span class="badge ok">OK</span>';};
+  const row=(lbl,val)=>`<div style="display:flex;gap:8px;padding:8px 0;border-bottom:0.5px solid var(--border)"><span style="font-size:12px;color:var(--text2);min-width:140px;flex-shrink:0">${lbl}</span><span style="font-size:13px;font-weight:500">${val||'—'}</span></div>`;
+  document.getElementById('modal').innerHTML=`
+  <h2><i class="ti ti-building"></i> ${esc(im.nome)}</h2>
+  ${row('Tipo',im.tipo)}
+  ${row('Endereço',im.endereco)}
+  ${row('Status',`<span class="badge ${im.status==='Alugado'?'ok':'neutral'}">${im.status}</span>`)}
+  ${row('Tipo de serviço',bS(im))}
+  ${row('Proprietário',im.proprietario)}
+  ${row('Inquilino',im.inquilino)}
+  ${row('Aluguel',im.aluguel?fR(im.aluguel):null)}
+  ${row('Condomínio',im.condominio?fR(im.condominio):null)}
+  ${row('Início do contrato',fD(im.inicioContrato))}
+  ${row('Vencimento do contrato',im.fimContrato?fD(im.fimContrato)+' '+stC_lbl():null)}
+  ${row('IPTU anual',im.iptuAnual?fR(im.iptuAnual):null)}
+  ${row('Vencimento IPTU',im.iptuVenc?fD(im.iptuVenc)+' '+stI_lbl():null)}
+  ${(im.historico&&im.historico.length>0)?row('Contratos anteriores',`<button class="btn sm ghost" onclick="closeModal();openHistorico(${im.id})"><i class="ti ti-history"></i>${im.historico.length} anterior${im.historico.length!==1?'es':''}</button>`):''}
+  <div class="modal-foot">
+    <button class="btn ghost" onclick="closeModal()">Fechar</button>
+    <button class="btn primary" onclick="closeModal();openEdit(${im.id})"><i class="ti ti-edit"></i>Editar</button>
+  </div>`;
+}
+
 const SRV_LABELS={
   'inter_completa':'Interm. Completa','intermediacao':'Interm. Completa',
   'inter_parceria':'Interm. c/ Parceria','inter_parcial':'Interm. Parcial',
@@ -931,7 +982,7 @@ function renderReceita(){
   </div>`;})()}
   <div class="card">
     <div class="card-hd"><span class="card-title">Detalhamento — ${MESES[m-1]} ${y}</span></div>
-    ${(()=>{const vd=recVendasDoMes(y,m);const linhasVenda=vd.itens.map(i=>`<tr><td><div class="tdname">${esc(i.nome)}</div><div class="tdsub">${esc(i.cliente)}</div></td><td><span class="badge purple"><i class="ti ti-home-dollar"></i>Venda</span></td><td style="font-size:12px">${esc(i.proprietario)}</td><td style="font-size:12px;color:var(--text2)">${i.label}</td><td style="text-align:right;font-weight:600;color:var(--s-text)">${fR(i.valor)}</td></tr>`);const totalGeral=total+vd.total;return linhas.length===0&&linhasVenda.length===0?`<div class="no-data"><i class="ti ti-receipt-off"></i>Nenhuma receita para este mês.</div>`:`<table><thead><tr><th>Imóvel</th><th>Tipo</th><th>Aluguel / Proprietário</th><th>Origem</th><th style="text-align:right">Receita</th></tr></thead><tbody>${linhas.map(({im,r})=>`<tr><td><div class="tdname">${esc(im.nome)}</div><div class="tdsub">${esc(im.inquilino||'—')}</div></td><td>${bS(im)}</td><td style="font-size:12px">${fR(im.aluguel)}</td><td style="font-size:12px;color:var(--text2)">${r.det}</td><td style="text-align:right;font-weight:600;color:var(--s-text)">${fR(r.val)}</td></tr>`).join('')}${linhasVenda.join('')}<tr class="row-total"><td colspan="4">Total do mês</td><td style="text-align:right;color:var(--s-text)">${fR(totalGeral)}</td></tr></tbody></table>`;})()}
+    ${(()=>{const vd=recVendasDoMes(y,m);const linhasVenda=vd.itens.map(i=>`<tr><td><div class="tdname">${esc(i.nome)}</div><div class="tdsub">${esc(i.cliente)}</div></td><td><span class="badge purple"><i class="ti ti-home-dollar"></i>Venda</span></td><td style="font-size:12px">${esc(i.proprietario)}</td><td style="font-size:12px;color:var(--text2)">${i.label}</td><td style="text-align:right;font-weight:600;color:var(--s-text)">${fR(i.valor)}</td></tr>`);const totalGeral=total+vd.total;return linhas.length===0&&linhasVenda.length===0?`<div class="no-data"><i class="ti ti-receipt-off"></i>Nenhuma receita para este mês.</div>`:`<table><thead><tr><th>Imóvel</th><th>Tipo</th><th>Proprietário / Inquilino</th><th>Origem</th><th style="text-align:right">Receita</th></tr></thead><tbody>${linhas.map(({im,r})=>`<tr style="cursor:pointer" onclick="openDetalhe(${im.id})"><td><div class="tdname">${esc(im.nome)}</div><div class="tdsub">${esc(im.inquilino||'—')}</div></td><td>${bS(im)}</td><td style="font-size:12px"><div>${esc(im.proprietario||'—')}</div><div style="color:var(--text2);font-size:11px">${esc(im.inquilino||'—')}</div></td><td style="font-size:12px;color:var(--text2)">${r.det}</td><td style="text-align:right;font-weight:600;color:var(--s-text)">${fR(r.val)}</td></tr>`).join('')}${linhasVenda.join('')}<tr class="row-total"><td colspan="4">Total do mês</td><td style="text-align:right;color:var(--s-text)">${fR(totalGeral)}</td></tr></tbody></table>`;})()}
   </div>`;
 }
 
@@ -970,7 +1021,7 @@ function renderContratos(){
     <button class="btn sm" onclick="window.print()"><i class="ti ti-printer"></i>Imprimir lista</button>
   </div>
   ${filterBar('contratos')}
-  <div class="card"><div class="card-hd"><span class="card-title">Contratos — por vencimento</span></div>${allC.length===0?`<div class="no-data"><i class="ti ti-file-off"></i>Nenhum contrato cadastrado</div>`:sorted.length===0?`<div class="no-data"><i class="ti ti-search"></i>Nenhum resultado encontrado.</div>`:`<table><thead><tr><th>Imóvel</th><th>Proprietário / Inquilino</th><th>Início</th><th>Vencimento</th><th>Prazo</th><th>Receita da imobiliária</th><th></th></tr></thead><tbody>${sorted.map(im=>{const d=dT(im.fimContrato),label=d<0?`Vencido há ${Math.abs(d)}d`:d===0?'Hoje':`${d}d`;const a=im.aluguel||0;const rec=im.status!=='Alugado'?'—':(im.srv==='administracao'?`${fR(a)} + ${fR(a*.1)}/mês (administração)`:`${fR(a)} — locação`);return`<tr><td><div class="tdname">${esc(im.nome)}</div><div class="tdsub">${bS(im)}</div></td><td style="font-size:12px"><div class="tdname">${esc(im.proprietario||'—')}</div><div class="tdsub">${esc(im.inquilino||'—')}</div></td><td style="font-size:12px">${fD(im.inicioContrato)}</td><td style="font-size:12px">${fD(im.fimContrato)}</td><td>${bC(im)} <span style="font-size:11px;color:var(--text2)">${label}</span></td><td style="font-size:12px;font-weight:500;white-space:nowrap">${rec}</td><td class="ac" style="white-space:nowrap"><button class="icon-btn" onclick="openRenovar(${im.id})" title="Renovar contrato" style="color:var(--s-text)"><i class="ti ti-refresh"></i></button><button class="icon-btn del" onclick="openEncerrar(${im.id})" title="Encerrar contrato"><i class="ti ti-door-exit"></i></button></td></tr>`;}).join('')}</tbody></table>`}</div>`;
+  <div class="card"><div class="card-hd"><span class="card-title">Contratos — por vencimento</span></div>${allC.length===0?`<div class="no-data"><i class="ti ti-file-off"></i>Nenhum contrato cadastrado</div>`:sorted.length===0?`<div class="no-data"><i class="ti ti-search"></i>Nenhum resultado encontrado.</div>`:`<table><thead><tr><th>Imóvel</th><th>Proprietário / Inquilino</th><th>Início</th><th>Vencimento</th><th>Prazo</th><th>Receita da imobiliária</th><th></th></tr></thead><tbody>${sorted.map(im=>{const d=dT(im.fimContrato),label=d<0?`Vencido há ${Math.abs(d)}d`:d===0?'Hoje':`${d}d`;const a=im.aluguel||0;const rec=im.status!=='Alugado'?'—':(im.srv==='administracao'?`${fR(a)} + ${fR(a*.1)}/mês (administração)`:`${fR(a)} — locação`);return`<tr style="cursor:pointer" onclick="openDetalhe(${im.id})"><td><div class="tdname">${esc(im.nome)}</div><div class="tdsub">${bS(im)}</div></td><td style="font-size:12px"><div class="tdname">${esc(im.proprietario||'—')}</div><div class="tdsub">${esc(im.inquilino||'—')}</div></td><td style="font-size:12px">${fD(im.inicioContrato)}</td><td style="font-size:12px">${fD(im.fimContrato)}</td><td>${bC(im)} <span style="font-size:11px;color:var(--text2)">${label}</span></td><td style="font-size:12px;font-weight:500;white-space:nowrap">${rec}</td><td class="ac" style="white-space:nowrap"><button class="icon-btn" onclick="openRenovar(${im.id})" title="Renovar contrato" style="color:var(--s-text)"><i class="ti ti-refresh"></i></button><button class="icon-btn del" onclick="openEncerrar(${im.id})" title="Encerrar contrato"><i class="ti ti-door-exit"></i></button></td></tr>`;}).join('')}</tbody></table>`}</div>`;
 }
 
 function renderIptu(){
@@ -985,7 +1036,7 @@ function renderIptu(){
   <div style="display:flex;justify-content:flex-end;margin-bottom:12px" class="no-print">
     <button class="btn sm" onclick="window.print()"><i class="ti ti-printer"></i>Imprimir lista</button>
   </div>
-  ${searchBox('iptu')}<div class="metrics"><div class="metric"><div class="ml"><i class="ti ti-receipt-2"></i>IPTU anual total</div><div class="mv">${fR(total)}</div></div><div class="metric"><div class="ml"><i class="ti ti-alert-triangle"></i>Vencimento próximo (≤30 dias)</div><div class="mv" style="color:var(--w-text)">${data.imoveis.filter(i=>stI(i)==='crit').length}</div></div></div><div class="card"><div class="card-hd"><span class="card-title">IPTU — por vencimento</span></div>${sorted.length===0?`<div class="no-data"><i class="ti ti-receipt-off"></i>${allI.length===0?'Nenhum IPTU cadastrado':'Nenhum resultado encontrado.'}</div>`:`<table><thead><tr><th>Imóvel</th><th>Proprietário</th><th>IPTU anual</th><th>Vencimento</th><th>Status</th></tr></thead><tbody>${sorted.map(im=>{const d=dT(im.iptuVenc),label=d===null?'':d<0?`Há ${Math.abs(d)}d`:d===0?'Hoje':`${d}d`;return`<tr><td><div class="tdname">${esc(im.nome)}</div><div class="tdsub">${esc(im.endereco||'')}</div></td><td style="font-size:12px">${esc(im.proprietario||'—')}</td><td style="font-size:12px">${im.iptuAnual?fR(im.iptuAnual):'—'}</td><td style="font-size:12px">${fD(im.iptuVenc)}</td><td>${bI(im)} <span style="font-size:11px;color:var(--text2)">${label}</span></td></tr>`;}).join('')}</tbody></table>`}</div>`;
+  ${searchBox('iptu')}<div class="metrics"><div class="metric"><div class="ml"><i class="ti ti-receipt-2"></i>IPTU anual total</div><div class="mv">${fR(total)}</div></div><div class="metric"><div class="ml"><i class="ti ti-alert-triangle"></i>Vencimento próximo (≤30 dias)</div><div class="mv" style="color:var(--w-text)">${data.imoveis.filter(i=>stI(i)==='crit').length}</div></div></div><div class="card"><div class="card-hd"><span class="card-title">IPTU — por vencimento</span></div>${sorted.length===0?`<div class="no-data"><i class="ti ti-receipt-off"></i>${allI.length===0?'Nenhum IPTU cadastrado':'Nenhum resultado encontrado.'}</div>`:`<table><thead><tr><th>Imóvel</th><th>Proprietário</th><th>IPTU anual</th><th>Vencimento</th><th>Status</th></tr></thead><tbody>${sorted.map(im=>{const d=dT(im.iptuVenc),label=d===null?'':d<0?`Há ${Math.abs(d)}d`:d===0?'Hoje':`${d}d`;return`<tr style="cursor:pointer" onclick="openDetalhe(${im.id})"><td><div class="tdname">${esc(im.nome)}</div><div class="tdsub">${esc(im.endereco||'')}</div></td><td style="font-size:12px">${esc(im.proprietario||'—')}</td><td style="font-size:12px">${im.iptuAnual?fR(im.iptuAnual):'—'}</td><td style="font-size:12px">${fD(im.iptuVenc)}</td><td>${bI(im)} <span style="font-size:11px;color:var(--text2)">${label}</span></td></tr>`;}).join('')}</tbody></table>`}</div>`;
 }
 
 function render(){
@@ -1127,28 +1178,28 @@ function renderCobrancas(){
   function contratoAtivoNoMes(im){
     if(!isAdmTipo(im.srv))return false;
     if(!im.inicioContrato)return false;
-    const[iy,im2]=im.inicioContrato.split('-').map(Number);
-    const ini=new Date(im.inicioContrato);
+    const p=im.inicioContrato.split('-').map(Number);
+    const iniY=p[0],iniM=p[1];
 
-    // Administração Parcial: só aparece no mês de aniversário (mesmo mês do início, todo ano)
-    if(im.srv==='adm_parcial'||im.srv==='adm_parcial_parceria'){
-      if(im2!==curM)return false; // só no mês do aniversário
-      if(ini>mesRef)return false;
+    // Verificar se contrato está ativo no mês selecionado (comparação por ano/mês)
+    function ativo(){
+      if(iniY>curY||(iniY===curY&&iniM>curM))return false; // não começou ainda
       if(im.fimContrato){
-        const fimMes=new Date(new Date(im.fimContrato).getFullYear(),new Date(im.fimContrato).getMonth(),1);
-        if(fimMes<mesRef)return false;
+        const fp=im.fimContrato.split('-').map(Number);
+        if(fp[0]<curY||(fp[0]===curY&&fp[1]<curM))return false; // já encerrou
       }
       return true;
     }
 
-    // Administração Completa/Parceria: todo mês exceto o mês de início
-    if(iy===curY&&im2===curM)return false;
-    if(ini>mesRef)return false;
-    if(im.fimContrato){
-      const fimMes=new Date(new Date(im.fimContrato).getFullYear(),new Date(im.fimContrato).getMonth(),1);
-      if(fimMes<mesRef)return false;
+    // Adm Parcial: só no mês de aniversário (mesmo mês do início, qualquer ano)
+    if(im.srv==='adm_parcial'||im.srv==='adm_parcial_parceria'){
+      if(iniM!==curM)return false;
+      return ativo();
     }
-    return true;
+
+    // Adm Completa / Parceria: todo mês EXCETO o mês de início (nesse mês recebe aluguel cheio)
+    if(iniY===curY&&iniM===curM)return false;
+    return ativo();
   }
 
   // Também incluir imóveis do histórico que tinham contrato naquele mês
@@ -1182,9 +1233,12 @@ function renderCobrancas(){
   const getKey=im=>im._histKey||chaveAdm(im.id,curY,curM);
   function taxaAdm(im){
     const srv2=im.srv||'adm_completa';
-    if(srv2==='adm_parcial')return(im._aluguelRef||0);
-    if(srv2==='adm_parcial_parceria')return(im._aluguelRef||0)*.5;
-    return(im._aluguelRef||0)*.1;
+    const a=im._aluguelRef||0;
+    if(srv2==='adm_parcial')return a;
+    if(srv2==='adm_parcial_parceria')return a*.5;
+    if(srv2==='adm_parceria')return a*.1;
+    if(srv2==='adm_completa'||srv2==='administracao')return a*.1;
+    return a*.1; // fallback
   }
   const totalMes=admAtivos.reduce((s,im)=>s+taxaAdm(im),0);
   const totalPago=admAtivos.filter(im=>isPago(im.id,curY,curM)||(im._histKey&&data.pagamentos&&data.pagamentos[im._histKey])).reduce((s,im)=>s+taxaAdm(im),0);
@@ -1223,7 +1277,7 @@ function renderCobrancas(){
       const taxa=(im._aluguelRef||0)*.1;
       const dataPag=getDataPag(im);
       const key=getKey(im);
-      return`<tr>
+      return`<tr style="cursor:pointer" onclick="openDetalhe(${im.id})">
         <td><div class="tdname">${esc(im.nome)}</div><div class="tdsub">${esc(im.inquilino||'—')}</div></td>
         <td style="font-size:12px">${esc(im.proprietario||'—')}</td>
         <td style="font-size:12px">${fR(im._aluguelRef)}</td>
