@@ -438,16 +438,16 @@ function recDoMes(im,y,m){
     // Recebe 100% do 1º aluguel todo ano no mês de início do contrato
     if(!mesInicioMes)return{tipo:null,val:0,det:''};
     if(m===mesInicioMes&&contratoAtivo()){
-      const label=assina?'1º aluguel (assinatura)':'Aniversário do contrato';
-      return{tipo:'loc',val:a,det:`${label} — Administração parcial (100% anual)`};
+      
+      return{tipo:'loc',val:a,det:`1º aluguel — Administração parcial (100% anual)`};
     }
     return{tipo:null,val:0,det:''};
   }
   if(srv==='adm_parcial_parceria'){
     if(!mesInicioMes)return{tipo:null,val:0,det:''};
     if(m===mesInicioMes&&contratoAtivo()){
-      const label=assina?'1º aluguel (assinatura)':'Aniversário do contrato';
-      return{tipo:'loc',val:a*.5,det:`${label} — Administração parcial com parceria (50% anual)`};
+      
+      return{tipo:'loc',val:a*.5,det:`1º aluguel — Administração parcial com parceria (50% anual)`};
     }
     return{tipo:null,val:0,det:''};
   }
@@ -751,10 +751,27 @@ async function saveForm(){
   closeModal();await persist();render();
 }
 async function delImovel(id){if(!confirm('Remover este imóvel?'))return;data.imoveis=data.imoveis.filter(i=>i.id!==id);await persist();render();}
-function prevRec(){const a=Number(F.aluguel)||0;if(F.srv==='administracao')return`<strong>Mês da assinatura:</strong> ${fR(a)} (1º aluguel) &nbsp;·&nbsp; <strong>A partir do 2º mês:</strong> ${fR(a*.1)}/mês (10% de ${fR(a)})`;return`<strong>Assinatura:</strong> ${fR(a)} (1º aluguel) &nbsp;·&nbsp; sem receita mensal recorrente`;}
-function updPrev(){const el=document.getElementById('fp');if(!el)return;el.className='info-box '+(F.srv==='administracao'?'green':'blue');el.innerHTML=prevRec();}
+function prevRec(){
+  const a=Number(F.aluguel)||0;
+  const srv=F.srv||'inter_completa';
+  if(srv==='inter_completa'||srv==='intermediacao') return`<strong>Assinatura:</strong> ${fR(a)} (100% do 1º aluguel)`;
+  if(srv==='inter_parceria') return`<strong>Assinatura:</strong> ${fR(a*.5)} (50% de ${fR(a)})`;
+  if(srv==='inter_parcial')  return`<strong>Assinatura:</strong> ${fR(a*.25)} (25% de ${fR(a)})`;
+  if(srv==='adm_completa'||srv==='administracao') return`<strong>Assinatura:</strong> ${fR(a)} (100% do 1º aluguel) &nbsp;·&nbsp; <strong>A partir do 2º mês:</strong> ${fR(a*.1)}/mês (10% do aluguel)`;
+  if(srv==='adm_parceria') return`<strong>Assinatura:</strong> ${fR(a*.5)} (50% do 1º aluguel) &nbsp;·&nbsp; <strong>A partir do 2º mês:</strong> ${fR(a*.1)}/mês (10% do aluguel)`;
+  if(srv==='adm_parcial') return`<strong>Todo mês de início do contrato:</strong> ${fR(a)} (100% do aluguel, anualmente)`;
+  if(srv==='adm_parcial_parceria') return`<strong>Todo mês de início do contrato:</strong> ${fR(a*.5)} (50% do aluguel, anualmente)`;
+  return`<strong>Assinatura:</strong> ${fR(a)}`;
+}
+function updPrev(){
+  const el=document.getElementById('fp');if(!el)return;
+  const srv=F.srv||'inter_completa';
+  const isAdm=srv.startsWith('adm');
+  el.className='info-box '+(isAdm?'green':'blue');
+  el.innerHTML=prevRec();
+}
 function renderModal(){
-  const isAdm=F.srv==='administracao';
+  const isAdm=(F.srv||'inter_completa').startsWith('adm')||F.srv==='administracao';
   document.getElementById('modal').innerHTML=`
   <h2>${editId?'Editar imóvel':'Novo imóvel'}</h2>
   <div class="slbl">Identificação</div>
@@ -859,9 +876,9 @@ function renderReceita(){
   <div class="month-bar no-print">
     <label><i class="ti ti-calendar"></i>Mês de referência</label>
     <button class="mnav" onclick="prevMonth()"><i class="ti ti-chevron-left"></i></button>
-    <input type="month" value="${p2(y)}-${p2(m)}" onchange="setMonth(this.value)">
+    <input type="month" value="${p2(y)}-${p2(m)}" onchange="setMonth(this.value)" style="opacity:0;width:0;padding:0;border:none;position:absolute">
+    <span class="month-lbl" style="min-width:160px;text-align:center">${MESES[m-1]} ${y}</span>
     <button class="mnav" onclick="nextMonth()"><i class="ti ti-chevron-right"></i></button>
-    <span class="month-lbl">${MESES[m-1]} ${y}</span>
     <button class="btn sm no-print" onclick="window.print()" style="margin-left:auto"><i class="ti ti-printer"></i>Imprimir lista</button>
   </div>
   <div class="print-header">
@@ -1125,9 +1142,9 @@ function renderCobrancas(){
   <div class="month-bar no-print">
     <label><i class="ti ti-calendar"></i>Mês de referência</label>
     <button class="mnav" onclick="prevCobMonth()"><i class="ti ti-chevron-left"></i></button>
-    <input type="month" value="${p2(curY)}-${p2(curM)}" onchange="setCobMonth(this.value)">
+    <input type="month" value="${p2(curY)}-${p2(curM)}" onchange="setCobMonth(this.value)" style="opacity:0;width:0;padding:0;border:none;position:absolute">
+    <span class="month-lbl" style="min-width:160px;text-align:center">${MESES[curM-1]} ${curY}</span>
     <button class="mnav" onclick="nextCobMonth()"><i class="ti ti-chevron-right"></i></button>
-    <span class="month-lbl">${MESES[curM-1]} ${curY}</span>
     <button class="btn sm no-print" onclick="window.print()" style="margin-left:auto"><i class="ti ti-printer"></i>Imprimir lista</button>
   </div>
   <div class="print-header">
