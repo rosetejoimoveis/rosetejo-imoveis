@@ -410,6 +410,7 @@ const p2=n=>String(n).padStart(2,'0');
 const dT=ds=>{if(!ds)return null;const d=new Date(ds),n=new Date();d.setHours(0,0,0,0);n.setHours(0,0,0,0);return Math.round((d-n)/864e5);};
 const fD=d=>{if(!d)return'—';const[y,m,day]=d.split('-');return`${day}/${m}/${y}`;};
 const fR=v=>'R$ '+Number(v||0).toLocaleString('pt-BR',{minimumFractionDigits:2,maximumFractionDigits:2});
+const sortByProp=arr=>[...arr].sort((a,b)=>(a.proprietario||'').localeCompare(b.proprietario||'','pt-BR',{sensitivity:'base'}));
 const esc=s=>String(s||'').replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;');
 const toDisp=iso=>iso?iso.split('-').reverse().join('/'):'';
 const toISO=disp=>{if(!disp||disp.length<10)return'';const[d,m,y]=disp.split('/');return(y&&m&&d)?`${y}-${m.padStart(2,'0')}-${d.padStart(2,'0')}`:''};
@@ -979,12 +980,12 @@ function renderDashboard(){
   <div class="card">
     <div class="card-hd"><span class="card-title">Todos os imóveis</span></div>
     <div style="padding:12px 16px 0">${searchBox('dashboard')}</div>
-    ${(()=>{const list=data.imoveis.filter(im=>matchSearch('dashboard',im));return list.length===0?`<div class="no-data"><i class="ti ti-building-off"></i>${data.imoveis.length===0?'Vá em "Imóveis" → "Novo imóvel" para começar.':'Nenhum resultado encontrado.'}</div>`:`<table><thead><tr><th>Imóvel</th><th>Proprietário</th><th>Serviço</th><th>Aluguel</th><th>Receita da imobiliária</th><th>Contrato</th><th>IPTU</th></tr></thead><tbody>${list.map(im=>{const a=im.aluguel||0;const rec=im.status==='Alugado'?(im.srv==='administracao'?`${fR(a)} + ${fR(a*.1)}/mês (administração)`:`${fR(a)} — locação`):'—';return`<tr style="cursor:pointer" onclick="openDetalhe(${im.id})"><td><div class="tdname">${esc(im.nome)}</div><div class="tdsub">${im.tipo}</div></td><td style="font-size:12px">${esc(im.proprietario||'—')}</td><td>${bS(im)}</td><td style="font-size:12px">${a?fR(a):'—'}</td><td style="font-size:12px">${rec}</td><td>${bC(im)}</td><td>${bI(im)}</td></tr>`;}).join('')}</tbody></table>`;})()}
+    ${(()=>{const list=sortByProp(data.imoveis.filter(im=>matchSearch('dashboard',im)));return list.length===0?`<div class="no-data"><i class="ti ti-building-off"></i>${data.imoveis.length===0?'Vá em "Imóveis" → "Novo imóvel" para começar.':'Nenhum resultado encontrado.'}</div>`:`<table><thead><tr><th>Imóvel</th><th>Proprietário</th><th>Serviço</th><th>Aluguel</th><th>Receita da imobiliária</th><th>Contrato</th><th>IPTU</th></tr></thead><tbody>${list.map(im=>{const a=im.aluguel||0;const rec=im.status==='Alugado'?(im.srv==='administracao'?`${fR(a)} + ${fR(a*.1)}/mês (administração)`:`${fR(a)} — locação`):'—';return`<tr style="cursor:pointer" onclick="openDetalhe(${im.id})"><td><div class="tdname">${esc(im.nome)}</div><div class="tdsub">${im.tipo}</div></td><td style="font-size:12px">${esc(im.proprietario||'—')}</td><td>${bS(im)}</td><td style="font-size:12px">${a?fR(a):'—'}</td><td style="font-size:12px">${rec}</td><td>${bC(im)}</td><td>${bI(im)}</td></tr>`;}).join('')}</tbody></table>`;})()}
   </div>`;
 }
 
 function renderReceita(){
-  const y=selY,m=selM,linhas=data.imoveis.map(im=>({im,r:recDoMes(im,y,m)})).filter(l=>l.r.val>0);
+  const y=selY,m=selM,linhas=sortByProp(data.imoveis.map(im=>({im,r:recDoMes(im,y,m),proprietario:im.proprietario})).filter(l=>l.r.val>0)).map(l=>({im:l.im,r:l.r}));
   const tAdm=linhas.filter(l=>l.r.tipo==='adm-m').reduce((s,l)=>s+l.r.val,0);
   const tLoc=linhas.filter(l=>l.r.tipo==='inter'||l.r.tipo==='loc').reduce((s,l)=>s+l.r.val,0);
   const total=tAdm+tLoc;
@@ -1031,7 +1032,7 @@ function renderImoveis(){
   </div>
   ${filterBar('imoveis')}
   <div class="card">
-    ${(()=>{const list=data.imoveis.filter(im=>matchSearch('imoveis',im));return list.length===0?`<div class="no-data"><i class="ti ti-building-off"></i>${data.imoveis.length===0?'Clique em "Novo imóvel" para começar':'Nenhum resultado encontrado.'}</div>`:`<table><thead><tr><th>Imóvel</th><th>Serviço</th><th>Proprietário / Inquilino</th><th>Aluguel</th><th>Cond.</th><th>Receita da imobiliária</th><th></th></tr></thead><tbody>${list.map(im=>{const a=im.aluguel||0,c=im.condominio||0;const rec=im.status==='Alugado'?(im.srv==='administracao'?`${fR(a)} + ${fR(a*.1)}/mês (administração)`:`${fR(a)} — locação`):'—';return`<tr style="cursor:pointer" onclick="openDetalhe(${im.id})"><td><div class="tdname">${esc(im.nome)}</div><div class="tdsub">${im.tipo} · ${im.status}</div></td><td>${bS(im)}</td><td style="font-size:12px"><div class="tdname">${esc(im.proprietario||'—')}</div><div class="tdsub">${esc(im.inquilino||'—')}</div></td><td style="font-size:12px;white-space:nowrap">${a?fR(a):'—'}</td><td style="font-size:12px;white-space:nowrap">${c?fR(c):'—'}</td><td style="font-size:12px;font-weight:500;white-space:nowrap">${rec}</td><td class="ac" style="white-space:nowrap">
+    ${(()=>{const list=sortByProp(data.imoveis.filter(im=>matchSearch('imoveis',im)));return list.length===0?`<div class="no-data"><i class="ti ti-building-off"></i>${data.imoveis.length===0?'Clique em "Novo imóvel" para começar':'Nenhum resultado encontrado.'}</div>`:`<table><thead><tr><th>Imóvel</th><th>Serviço</th><th>Proprietário / Inquilino</th><th>Aluguel</th><th>Cond.</th><th>Receita da imobiliária</th><th></th></tr></thead><tbody>${list.map(im=>{const a=im.aluguel||0,c=im.condominio||0;const rec=im.status==='Alugado'?(im.srv==='administracao'?`${fR(a)} + ${fR(a*.1)}/mês (administração)`:`${fR(a)} — locação`):'—';return`<tr style="cursor:pointer" onclick="openDetalhe(${im.id})"><td><div class="tdname">${esc(im.nome)}</div><div class="tdsub">${im.tipo} · ${im.status}</div></td><td>${bS(im)}</td><td style="font-size:12px"><div class="tdname">${esc(im.proprietario||'—')}</div><div class="tdsub">${esc(im.inquilino||'—')}</div></td><td style="font-size:12px;white-space:nowrap">${a?fR(a):'—'}</td><td style="font-size:12px;white-space:nowrap">${c?fR(c):'—'}</td><td style="font-size:12px;font-weight:500;white-space:nowrap">${rec}</td><td class="ac" style="white-space:nowrap" onclick="event.stopPropagation()">
   <button class="icon-btn" onclick="openHistorico(${im.id})" title="Histórico de contratos"><i class="ti ti-history"></i></button>
   <button class="icon-btn" onclick="openEdit(${im.id})" title="Editar"><i class="ti ti-edit"></i></button>
   <button class="icon-btn del" onclick="delImovel(${im.id})" title="Remover"><i class="ti ti-trash"></i></button>
@@ -1041,7 +1042,7 @@ function renderImoveis(){
 
 function renderContratos(){
   const allC=[...data.imoveis].filter(i=>i.fimContrato).sort((a,b)=>new Date(a.fimContrato)-new Date(b.fimContrato));
-  const sorted=allC.filter(im=>matchSearch('contratos',im));
+  const sorted=sortByProp(allC.filter(im=>matchSearch('contratos',im)));
   return`
   <div class="print-header">
     <h2>Contratos — por vencimento</h2>
@@ -1057,7 +1058,7 @@ function renderContratos(){
 
 function renderIptu(){
   const allI=[...data.imoveis].filter(i=>i.iptuVenc).sort((a,b)=>new Date(a.iptuVenc)-new Date(b.iptuVenc));
-  const sorted=allI.filter(im=>matchSearch('iptu',im));
+  const sorted=sortByProp(allI.filter(im=>matchSearch('iptu',im)));
   const total=data.imoveis.reduce((s,i)=>s+(i.iptuAnual||0),0);
   return`
   <div class="print-header">
@@ -1171,7 +1172,7 @@ async function salvarVenda(){
 async function delVenda(id){if(!confirm('Remover esta venda?'))return;data.vendas=data.vendas.filter(x=>x.id!==id);await persist();render();}
 
 function renderVendas(){
-  const list=(data.vendas||[]).filter(v=>matchSearchVenda(v));
+  const list=[...(data.vendas||[]).filter(v=>matchSearchVenda(v))].sort((a,b)=>(a.proprietario||'').localeCompare(b.proprietario||'','pt-BR',{sensitivity:'base'}));
   const totalGeral=(data.vendas||[]).reduce((s,v)=>s+v.valorTotal,0);
   return`
   <div class="print-header">
@@ -1278,7 +1279,7 @@ function renderCobrancas(){
   });
 
   const q=(searchQ['cobrancas']||'').toLowerCase();
-  const list=admAtivos.filter(im=>!q||[im.nome,im.proprietario,im.inquilino].some(v=>v&&v.toLowerCase().includes(q)));
+  const list=sortByProp(admAtivos.filter(im=>!q||[im.nome,im.proprietario,im.inquilino].some(v=>v&&v.toLowerCase().includes(q))));
   const getKey=im=>im._histKey||chaveAdm(im.id,curY,curM);
   function taxaAdm(im){
     const srv2=im.srv||'adm_completa';
