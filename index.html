@@ -1516,6 +1516,8 @@ function dpSelectDay(y,m,d,altY){
   F[dpOpen.field]=iso;
   const inp=document.getElementById('dp-inp-'+dpOpen.field);
   if(inp)inp.value=isoToDisp(iso);
+  const clrBtn=document.getElementById('dp-clr-'+dpOpen.field);
+  if(clrBtn)clrBtn.style.display='flex';
   dpClose();updPrev();
 }
 function dpClose(){dpOpen=null;const el=document.getElementById('dp-cal-popup');if(el)el.remove();}
@@ -1537,11 +1539,13 @@ function dpOpen2(field){
 }
 function dpOutsideClick(e){if(!e.target.closest('.dp-cal')&&!e.target.closest('.dp-wrap'))dpClose();}
 
+function dpClear(field){F[field]='';const inp=document.getElementById('dp-inp-'+field);if(inp)inp.value='';const btn=document.getElementById('dp-clr-'+field);if(btn)btn.style.display='none';updPrev();}
+
 function dpInput(field,placeholder){
   const val=F[field]?isoToDisp(F[field]):'';
-  return`<div class="dp-wrap">
-    <input id="dp-inp-${field}" class="dp-input" readonly value="${val}" placeholder="${placeholder}" onclick="dpOpen2('${field}')">
-    <div id="dp-cal-popup-${field}"></div>
+  return`<div class="dp-wrap" style="display:flex;align-items:center;gap:6px">
+    <input id="dp-inp-${field}" class="dp-input" readonly value="${val}" placeholder="${placeholder}" onclick="dpOpen2('${field}')" style="flex:1">
+    <button id="dp-clr-${field}" type="button" onclick="dpClear('${field}')" title="Limpar data" style="display:${val?'flex':'none'};background:none;border:none;cursor:pointer;color:var(--text2);padding:4px;border-radius:var(--r);align-items:center;flex-shrink:0"><i class="ti ti-x" style="font-size:14px"></i></button>
   </div>`;
 }
 
