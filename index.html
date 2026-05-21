@@ -1405,15 +1405,15 @@ function renderCobrancas(){
   <div class="no-print" style="margin-bottom:14px"><input data-search="cobrancas" type="text" placeholder="Pesquisar por imóvel, proprietário ou inquilino..." value="${esc(searchQ['cobrancas'])}" oninput="setSearch('cobrancas',this.value)" style="width:100%;padding:9px 12px;font-size:13px;border:0.5px solid var(--border2);border-radius:var(--r);background:var(--bg);color:var(--text)"></div>
   <div class="card">
     <div class="table-scroll">${list.length===0?`<div class="no-data"><i class="ti ti-building-off"></i>${admAtivos.length===0?'Nenhum imóvel em administração neste mês.':'Nenhum resultado encontrado.'}</div>`:`
-    <div class="card-scroll"><table><thead><tr><th>Imóvel</th><th>Proprietário</th><th>Aluguel</th><th>Taxa (10%)</th><th>Status</th><th>Ação</th></tr></thead>
+    <div class="card-scroll"><table><thead><tr><th>Imóvel</th><th>Proprietário / Inquilino</th><th>Aluguel</th><th>Taxa (10%)</th><th>Status</th><th>Ação</th></tr></thead>
     <tbody>${list.map(im=>{
       const pago=isPagoItem(im);
       const taxa=(im._aluguelRef||0)*.1;
       const dataPag=getDataPag(im);
       const key=getKey(im);
       return`<tr style="cursor:pointer" onclick="openDetalhe(${im.id})">
-        <td><div class="tdname">${esc(im.nome)}</div><div class="tdsub">${esc(im.inquilino||'—')}</div></td>
-        <td style="font-size:12px">${esc(im.proprietario||'—')}</td>
+        <td><div class="tdname" style="max-width:220px;white-space:normal;word-break:break-word">${esc(im.nome)}</div></td>
+        <td style="font-size:12px"><div>${esc(im.proprietario||'—')}</div><div style="color:var(--text2);margin-top:2px">${esc(im.inquilino||'—')}</div></td>
         <td style="font-size:12px">${fR(im._aluguelRef)}</td>
         <td style="font-size:12px;font-weight:500">${fR(taxa)}</td>
         <td>${pago?`<span class="badge ok"><i class="ti ti-check"></i>Pago${dataPag?' em '+fD(dataPag):''}</span>`:`<span class="badge warn"><i class="ti ti-clock"></i>Pendente</span>`}</td>
