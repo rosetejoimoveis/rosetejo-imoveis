@@ -1047,7 +1047,8 @@ function renderContratos(){
     <h2>Contratos — por vencimento</h2>
     <p>Gerado em ${new Date().toLocaleDateString('pt-BR')} · ${allC.length} contrato${allC.length!==1?'s':''} cadastrado${allC.length!==1?'s':''}</p>
   </div>
-  <div style="display:flex;justify-content:flex-end;margin-bottom:12px" class="no-print">
+  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px" class="no-print">
+    <span style="font-size:15px;font-weight:500">Contratos (${allC.length})</span>
     <button class="btn sm" onclick="window.print()"><i class="ti ti-printer"></i>Imprimir lista</button>
   </div>
   ${filterBar('contratos')}
@@ -1063,7 +1064,8 @@ function renderIptu(){
     <h2>IPTU — por vencimento</h2>
     <p>Gerado em ${new Date().toLocaleDateString('pt-BR')} · Total anual: ${fR(total)}</p>
   </div>
-  <div style="display:flex;justify-content:flex-end;margin-bottom:12px" class="no-print">
+  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px" class="no-print">
+    <span style="font-size:15px;font-weight:500">IPTU (${allI.length} imóvel${allI.length!==1?'s':''})</span>
     <button class="btn sm" onclick="window.print()"><i class="ti ti-printer"></i>Imprimir lista</button>
   </div>
   ${searchBox('iptu')}<div class="metrics"><div class="metric"><div class="ml"><i class="ti ti-receipt-2"></i>IPTU anual total</div><div class="mv">${fR(total)}</div></div><div class="metric"><div class="ml"><i class="ti ti-alert-triangle"></i>Vencimento próximo (≤30 dias)</div><div class="mv" style="color:var(--w-text)">${data.imoveis.filter(i=>stI(i)==='crit').length}</div></div></div><div class="card"><div class="card-hd"><span class="card-title">IPTU — por vencimento</span></div>${sorted.length===0?`<div class="no-data"><i class="ti ti-receipt-off"></i>${allI.length===0?'Nenhum IPTU cadastrado':'Nenhum resultado encontrado.'}</div>`:`<table><thead><tr><th>Imóvel</th><th>Proprietário</th><th>IPTU anual</th><th>Vencimento</th><th>Status</th></tr></thead><tbody>${sorted.map(im=>{const d=dT(im.iptuVenc),label=d===null?'':d<0?`Há ${Math.abs(d)}d`:d===0?'Hoje':`${d}d`;return`<tr style="cursor:pointer" onclick="openDetalhe(${im.id})"><td><div class="tdname">${esc(im.nome)}</div><div class="tdsub">${esc(im.endereco||'')}</div></td><td style="font-size:12px">${esc(im.proprietario||'—')}</td><td style="font-size:12px">${im.iptuAnual?fR(im.iptuAnual):'—'}</td><td style="font-size:12px">${fD(im.iptuVenc)}</td><td>${bI(im)} <span style="font-size:11px;color:var(--text2)">${label}</span></td></tr>`;}).join('')}</tbody></table>`}</div>`;
