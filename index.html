@@ -1042,7 +1042,7 @@ function renderReceita(){
   const linhasHtml=linhas.map(({im,r})=>{
     const a=im.aluguel||0;
     return'<tr style="cursor:pointer" onclick="openDetalhe('+im.id+')">'+
-      '<td><div class="tdname">'+esc(im.nome)+'</div><div class="tdsub">'+esc(im.inquilino||'—')+'</div></td>'+
+      '<td><div class="tdname" style="max-width:220px;white-space:normal;word-break:break-word">'+esc(im.nome)+'</div></td>'+
       '<td>'+bS(im)+'</td>'+
       '<td style="font-size:12px"><div>'+esc(im.proprietario||'—')+'</div><div style="color:var(--text2);font-size:11px">'+esc(im.inquilino||'—')+'</div></td>'+
       '<td style="font-size:12px">'+fR(a)+'</td>'+
