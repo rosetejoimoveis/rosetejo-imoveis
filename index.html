@@ -86,6 +86,8 @@ nav{display:flex;gap:2px;background:var(--bg2);border:0.5px solid var(--border);
 .no-data{padding:32px 20px;text-align:center;color:var(--text2);font-size:13px}
 .no-data i{font-size:28px;display:block;margin-bottom:10px;color:var(--text3)}
 table{width:100%;border-collapse:collapse;font-size:13px}
+.card-scroll{overflow-y:auto;max-height:62vh}
+.card-scroll th{position:sticky;top:0;z-index:5;background:var(--bg2)!important;box-shadow:0 1px 0 var(--border)}
 th{padding:9px 14px;text-align:left;font-size:11px;font-weight:600;color:var(--text2);background:var(--bg2);border-bottom:0.5px solid var(--border)}
 td{padding:10px 14px;border-bottom:0.5px solid var(--border);vertical-align:middle}
 tr:last-child td{border-bottom:none}
@@ -322,12 +324,17 @@ let data={imoveis:[],nextId:1,dismissedAlerts:[],vendas:[],pagamentos:{},nextVen
 let curTab='dashboard',selY=today.getFullYear(),selM=today.getMonth()+1;
 let F={},editId=null,busy=false;
 let searchQ={dashboard:'',receita:'',imoveis:'',contratos:'',iptu:'',vendas:'',cobrancas:''};
+// filtros extras para receita e visão geral
+let srvFilterDash='todos',srvFilterRec='todos';
 let cobY=today.getFullYear(),cobM=today.getMonth()+1;
 function prevCobMonth(){if(cobM===1){cobM=12;cobY--;}else cobM--;render();}
 function nextCobMonth(){if(cobM===12){cobM=1;cobY++;}else cobM++;render();}
 function setCobMonth(v){if(!v)return;const[y,m]=v.split('-').map(Number);cobY=y;cobM=m;render();}
 let srvFilter={imoveis:'todos',contratos:'todos'};
 function setSrv(tab,v){srvFilter[tab]=v;render();const inp=document.querySelector(`input[data-search="${tab}"]`);if(inp){inp.focus();}}
+function setSrvDash(v){srvFilterDash=v;render();}
+function setSrvRec(v){srvFilterRec=v;render();}
+function setSearchRec(v){searchQ['receita']=v.toLowerCase();render();const inp=document.querySelector('input[data-search="receita"]');if(inp){inp.focus();inp.setSelectionRange(inp.value.length,inp.value.length);}}
 function setSearch(tab,v){searchQ[tab]=v.toLowerCase();render();const inp=document.querySelector(`input[data-search="${tab}"]`);if(inp){inp.focus();inp.setSelectionRange(inp.value.length,inp.value.length);}}
 function searchBox(tab){return`<div style="margin-bottom:14px"><input data-search="${tab}" type="text" placeholder="Pesquisar por imóvel, proprietário ou inquilino..." value="${esc(searchQ[tab])}" oninput="setSearch('${tab}',this.value)" style="width:100%;padding:9px 12px;font-size:13px;border:0.5px solid var(--border2);border-radius:var(--r);background:var(--bg);color:var(--text)"></div>`;}
 function filterBar(tab){
@@ -867,7 +874,7 @@ function openHistorico(id){
       <td style="font-size:12px">${esc(h.inquilino||'—')}</td>
       <td style="font-size:12px">${fD(h.encerradoEm)||'—'}</td>
       <td>${tipoLabel}</td>
-    </tr>`;}).join('')}</tbody></table>`}
+    </tr>`;}).join('')}</tbody></table></div>`}
   <div class="slbl" style="margin-top:16px">Contrato atual</div>
   <table><thead><tr><th>Período</th><th>Aluguel</th><th>Status</th></tr></thead>
   <tbody><tr>
@@ -975,7 +982,10 @@ function renderDashboard(){
     <h2>Gestão Financeira Rose Tejo Imóveis — Visão Geral</h2>
     <p>Gerado em ${new Date().toLocaleDateString('pt-BR')}</p>
   </div>
-  <div style="display:flex;justify-content:flex-end;margin-bottom:12px" class="no-print">
+  <div style="display:flex;gap:8px;align-items:center;justify-content:space-between;margin-bottom:12px;flex-wrap:wrap" class="no-print">
+    <select onchange="setSrvDash(this.value)" style="padding:9px 10px;font-size:13px;border:0.5px solid var(--border2);border-radius:var(--r);background:var(--bg);color:var(--text);min-width:220px">
+      ${[{v:'todos',l:'Todos os serviços'},{v:'inter_completa',l:'Intermediação Completa — 100% do 1º aluguel, sem receita mensal'},{v:'inter_parceria',l:'Intermediação com Parceria — 50% do 1º aluguel, sem receita mensal'},{v:'inter_parcial',l:'Intermediação Parcial — 25% do 1º aluguel, sem receita mensal'},{v:'adm_completa',l:'Administração Completa — 100% do 1º aluguel + 10%/mês'},{v:'adm_parceria',l:'Administração com Parceria — 50% do 1º aluguel + 10%/mês'},{v:'adm_parcial',l:'Administração Parcial — 100% do aluguel 1x por ano'},{v:'adm_parcial_parceria',l:'Administração Parcial com Parceria — 50% do aluguel 1x por ano'}].map(o=>`<option value="${o.v}"${srvFilterDash===o.v?' selected':''}>${o.l}</option>`).join('')}
+    </select>
     <button class="btn sm" onclick="window.print()"><i class="ti ti-printer"></i>Imprimir lista</button>
   </div>
   <div class="metrics">
@@ -996,7 +1006,13 @@ function renderDashboard(){
   <div class="card">
     <div class="card-hd"><span class="card-title">Todos os imóveis</span></div>
     <div style="padding:12px 16px 0">${searchBox('dashboard')}</div>
-    ${(()=>{const list=sortByProp(data.imoveis.filter(im=>matchSearch('dashboard',im)));return list.length===0?`<div class="no-data"><i class="ti ti-building-off"></i>${data.imoveis.length===0?'Vá em "Imóveis" → "Novo imóvel" para começar.':'Nenhum resultado encontrado.'}</div>`:`<table><thead><tr><th>Imóvel</th><th>Proprietário</th><th>Serviço</th><th>Aluguel</th><th>Receita da imobiliária</th><th>Contrato</th><th>IPTU</th></tr></thead><tbody>${list.map(im=>{const a=im.aluguel||0;const rec=im.status==='Alugado'?(im.srv==='administracao'?`${fR(a)} + ${fR(a*.1)}/mês (administração)`:`${fR(a)} — locação`):'—';return`<tr style="cursor:pointer" onclick="openDetalhe(${im.id})"><td><div class="tdname">${esc(im.nome)}</div><div class="tdsub">${im.tipo}</div></td><td style="font-size:12px">${esc(im.proprietario||'—')}</td><td>${bS(im)}</td><td style="font-size:12px">${a?fR(a):'—'}</td><td style="font-size:12px">${rec}</td><td>${bC(im)}</td><td>${bI(im)}</td></tr>`;}).join('')}</tbody></table>`;})()}
+    ${(()=>{const list=sortByProp(data.imoveis.filter(im=>{
+    if(!matchSearch('dashboard',im))return false;
+    if(srvFilterDash==='todos')return true;
+    const s=im.srv||'inter_completa';
+    const norm=s==='intermediacao'?'inter_completa':s==='administracao'?'adm_completa':s;
+    return norm===srvFilterDash;
+  }));return list.length===0?`<div class="no-data"><i class="ti ti-building-off"></i>${data.imoveis.length===0?'Vá em "Imóveis" → "Novo imóvel" para começar.':'Nenhum resultado encontrado.'}</div>`:`<div class="card-scroll"><table><thead><tr><th>Imóvel</th><th>Proprietário</th><th>Serviço</th><th>Aluguel</th><th>Receita da imobiliária</th><th>Contrato</th><th>IPTU</th></tr></thead><tbody>${list.map(im=>{const a=im.aluguel||0;const rec=im.status==='Alugado'?(im.srv==='administracao'?`${fR(a)} + ${fR(a*.1)}/mês (administração)`:`${fR(a)} — locação`):'—';return`<tr style="cursor:pointer" onclick="openDetalhe(${im.id})"><td><div class="tdname">${esc(im.nome)}</div><div class="tdsub">${im.tipo}</div></td><td style="font-size:12px">${esc(im.proprietario||'—')}</td><td>${bS(im)}</td><td style="font-size:12px">${a?fR(a):'—'}</td><td style="font-size:12px">${rec}</td><td>${bC(im)}</td><td>${bI(im)}</td></tr>`;}).join('')}</tbody></table></div>`;})()}
   </div>`;
 }
 
@@ -1005,6 +1021,31 @@ function renderReceita(){
   const tAdm=linhas.filter(l=>l.r.tipo==='adm-m').reduce((s,l)=>s+l.r.val,0);
   const tLoc=linhas.filter(l=>l.r.tipo==='inter'||l.r.tipo==='loc').reduce((s,l)=>s+l.r.val,0);
   const total=tAdm+tLoc;
+  // Pré-calcular HTML das linhas para evitar template literals aninhados
+  const linhasHtml=linhas.map(({im,r})=>{
+    const a=im.aluguel||0;
+    return'<tr style="cursor:pointer" onclick="openDetalhe('+im.id+')">'+
+      '<td><div class="tdname">'+esc(im.nome)+'</div><div class="tdsub">'+esc(im.inquilino||'—')+'</div></td>'+
+      '<td>'+bS(im)+'</td>'+
+      '<td style="font-size:12px"><div>'+esc(im.proprietario||'—')+'</div><div style="color:var(--text2);font-size:11px">'+esc(im.inquilino||'—')+'</div></td>'+
+      '<td style="font-size:12px">'+fR(a)+'</td>'+
+      '<td style="font-size:12px;color:var(--text2)">'+r.det+'</td>'+
+      '<td style="text-align:right;font-weight:600;color:var(--s-text)">'+fR(r.val)+'</td>'+
+      '</tr>';
+  }).join('');
+  const linhasVendaHtml=itensVendaFiltrados.map(i=>{
+    const nomeEsc=esc(i.nome);
+    const onclk='openDetalheVendaByNome("'+nomeEsc+'")';
+    return'<tr style="cursor:pointer" onclick="'+onclk+'">'+
+      '<td><div class="tdname">'+nomeEsc+'</div><div class="tdsub">'+esc(i.cliente)+'</div></td>'+
+      '<td><span class="badge purple"><i class="ti ti-home-dollar"></i>Venda</span></td>'+
+      '<td style="font-size:12px">'+esc(i.proprietario)+'</td>'+
+      '<td style="font-size:12px">—</td>'+
+      '<td style="font-size:12px;color:var(--text2)">'+i.label+'</td>'+
+      '<td style="text-align:right;font-weight:600;color:var(--s-text)">'+fR(i.valor)+'</td>'+
+      '</tr>';
+  }).join('');
+
   return`
   <div class="month-bar no-print">
     <label><i class="ti ti-calendar"></i>Mês de referência</label>
@@ -1018,7 +1059,7 @@ function renderReceita(){
     <h2>Receita por Mês — ${MESES[m-1]} ${y}</h2>
     <p>Gerado em ${new Date().toLocaleDateString('pt-BR')}</p>
   </div>
-  ${(()=>{const vd=recVendasDoMes(y,m);const tVenda=vd.total;const totalGeral=total+tVenda;return`
+  ${(()=>{const tVenda=vdMes.total;const totalGeral=total+tVenda;return`
   <div class="metrics" style="grid-template-columns:repeat(3,1fr);margin-bottom:10px">
     <div class="metric ${tLoc>0?'hl':''}"><div class="ml"><i class="ti ti-handshake"></i>Locação (1º aluguel)</div><div class="mv">${fR(tLoc)}</div><div class="ms">${tLoc>0?'primeiro aluguel recebido':'sem contratos novos'}</div></div>
     <div class="metric ${tAdm>0?'hl':''}"><div class="ml"><i class="ti ti-settings"></i>Administração</div><div class="mv">${fR(tAdm)}</div><div class="ms">${tAdm>0?'10% mensal recorrente':'sem imóveis administrados ativos'}</div></div>
@@ -1027,10 +1068,19 @@ function renderReceita(){
   <div class="metrics" style="grid-template-columns:1fr;margin-bottom:18px">
     <div class="metric ${totalGeral>0?'hl':''}"><div class="ml"><i class="ti ti-cash"></i>Total do mês — ${MESES[m-1]} ${y}</div><div class="mv">${fR(totalGeral)}</div><div class="ms">${linhas.length} locação/administração${tVenda>0?' + '+vd.itens.length+' venda(s)':''}</div></div>
   </div>`;})()}
+  <div style="display:flex;gap:8px;align-items:center;margin-bottom:14px;flex-wrap:wrap" class="no-print">
+    <input data-search="receita" type="text" placeholder="Pesquisar por imóvel, proprietário ou inquilino..." value="${esc(searchQ['receita'])}" oninput="setSearchRec(this.value)" style="flex:1;min-width:200px;padding:9px 12px;font-size:13px;border:0.5px solid var(--border2);border-radius:var(--r);background:var(--bg);color:var(--text)">
+    <select onchange="setSrvRec(this.value)" style="padding:9px 10px;font-size:13px;border:0.5px solid var(--border2);border-radius:var(--r);background:var(--bg);color:var(--text);min-width:220px">
+      ${[{v:'todos',l:'Todos os serviços'},{v:'inter_completa',l:'Intermediação Completa — 100% do 1º aluguel, sem receita mensal'},{v:'inter_parceria',l:'Intermediação com Parceria — 50% do 1º aluguel, sem receita mensal'},{v:'inter_parcial',l:'Intermediação Parcial — 25% do 1º aluguel, sem receita mensal'},{v:'adm_completa',l:'Administração Completa — 100% do 1º aluguel + 10%/mês'},{v:'adm_parceria',l:'Administração com Parceria — 50% do 1º aluguel + 10%/mês'},{v:'adm_parcial',l:'Administração Parcial — 100% do aluguel 1x por ano'},{v:'adm_parcial_parceria',l:'Administração Parcial com Parceria — 50% do aluguel 1x por ano'},{v:'venda',l:'Vendas'}].map(o=>`<option value="${o.v}"${srvFilterRec===o.v?' selected':''}>${o.l}</option>`).join('')}
+    </select>
+  </div>
   <div class="card">
     <div class="card-hd"><span class="card-title">Detalhamento — ${MESES[m-1]} ${y}</span></div>
-    ${(()=>{const vd=recVendasDoMes(y,m);const linhasVenda=vd.itens.map(i=>`<tr style="cursor:pointer" onclick="openDetalheVendaByNome('${esc(i.nome)}')"><td><div class="tdname">${esc(i.nome)}</div><div class="tdsub">${esc(i.cliente)}</div></td><td><span class="badge purple"><i class="ti ti-home-dollar"></i>Venda</span></td><td style="font-size:12px">${esc(i.proprietario)}</td><td style="font-size:12px">—</td><td style="font-size:12px;color:var(--text2)">${i.label}</td><td style="text-align:right;font-weight:600;color:var(--s-text)">${fR(i.valor)}</td></tr>`);const totalGeral=total+vd.total;return linhas.length===0&&linhasVenda.length===0?`<div class="no-data"><i class="ti ti-receipt-off"></i>Nenhuma receita para este mês.</div>`:`<table><thead><tr><th>Imóvel</th><th>Tipo</th><th>Proprietário / Inquilino</th><th>Aluguel</th><th>Origem</th><th style="text-align:right">Receita</th></tr></thead><tbody>${linhas.map(({im,r})=>`<tr style="cursor:pointer" onclick="openDetalhe(${im.id})"><td><div class="tdname">${esc(im.nome)}</div><div class="tdsub">${esc(im.inquilino||'—')}</div></td><td>${bS(im)}</td><td style="font-size:12px"><div>${esc(im.proprietario||'—')}</div><div style="color:var(--text2);font-size:11px">${esc(im.inquilino||'—')}</div></td><td style="font-size:12px">${fR(im.aluguel)}</td><td style="font-size:12px;color:var(--text2)">${r.det}</td><td style="text-align:right;font-weight:600;color:var(--s-text)">${fR(r.val)}</td></tr>`).join('')}${linhasVenda.join('')}<tr class="row-total"><td colspan="5">Total do mês</td><td style="text-align:right;color:var(--s-text)">${fR(totalGeral)}</td></tr></tbody></table>`;})()}
-  </div>`;
+    ${(linhas.length===0&&itensVendaFiltrados.length===0)?'<div class="no-data"><i class="ti ti-receipt-off"></i>Nenhuma receita para este mês.</div>':
+      ('<div class="card-scroll"><table><thead><tr><th>Imóvel</th><th>Tipo</th><th>Proprietário / Inquilino</th><th>Aluguel</th><th>Origem</th><th style="text-align:right">Receita</th></tr></thead><tbody>'+
+      linhasHtml+linhasVendaHtml+
+      '<tr class="row-total"><td colspan="5">Total do mês</td><td style="text-align:right;color:var(--s-text)">'+fR(total+vdMes.total)+'</td></tr>'+
+      '</tbody></table></div>')}</div>`;
 }
 
 function renderImoveis(){
@@ -1047,13 +1097,12 @@ function renderImoveis(){
     </div>
   </div>
   ${filterBar('imoveis')}
-  <div class="card">
-    ${(()=>{const list=sortByProp(data.imoveis.filter(im=>matchSearch('imoveis',im)));return list.length===0?`<div class="no-data"><i class="ti ti-building-off"></i>${data.imoveis.length===0?'Clique em "Novo imóvel" para começar':'Nenhum resultado encontrado.'}</div>`:`<table><thead><tr><th>Imóvel</th><th>Serviço</th><th>Proprietário / Inquilino</th><th>Aluguel</th><th>Cond.</th><th>Receita da imobiliária</th><th></th></tr></thead><tbody>${list.map(im=>{const a=im.aluguel||0,c=im.condominio||0;const rec=im.status==='Alugado'?(im.srv==='administracao'?`${fR(a)} + ${fR(a*.1)}/mês (administração)`:`${fR(a)} — locação`):'—';return`<tr style="cursor:pointer" onclick="openDetalhe(${im.id})"><td><div class="tdname">${esc(im.nome)}</div><div class="tdsub">${im.tipo} · ${im.status}</div></td><td>${bS(im)}</td><td style="font-size:12px"><div class="tdname">${esc(im.proprietario||'—')}</div><div class="tdsub">${esc(im.inquilino||'—')}</div></td><td style="font-size:12px;white-space:nowrap">${a?fR(a):'—'}</td><td style="font-size:12px;white-space:nowrap">${c?fR(c):'—'}</td><td style="font-size:12px;font-weight:500;white-space:nowrap">${rec}</td><td class="ac" style="white-space:nowrap" onclick="event.stopPropagation()">
+  <div class="card"><div class="table-scroll">
+    <div class="table-scroll">${(()=>{const list=sortByProp(data.imoveis.filter(im=>matchSearch('imoveis',im)));return list.length===0?`<div class="no-data"><i class="ti ti-building-off"></i>${data.imoveis.length===0?'Clique em "Novo imóvel" para começar':'Nenhum resultado encontrado.'}</div>`:`<div class="card-scroll"><table><thead><tr><th>Imóvel</th><th>Serviço</th><th>Proprietário / Inquilino</th><th>Aluguel</th><th>Cond.</th><th>Receita da imobiliária</th><th></th></tr></thead><tbody>${list.map(im=>{const a=im.aluguel||0,c=im.condominio||0;const rec=im.status==='Alugado'?(im.srv==='administracao'?`${fR(a)} + ${fR(a*.1)}/mês (administração)`:`${fR(a)} — locação`):'—';return`<tr style="cursor:pointer" onclick="openDetalhe(${im.id})"><td><div class="tdname">${esc(im.nome)}</div><div class="tdsub">${im.tipo} · ${im.status}</div></td><td>${bS(im)}</td><td style="font-size:12px"><div class="tdname">${esc(im.proprietario||'—')}</div><div class="tdsub">${esc(im.inquilino||'—')}</div></td><td style="font-size:12px;white-space:nowrap">${a?fR(a):'—'}</td><td style="font-size:12px;white-space:nowrap">${c?fR(c):'—'}</td><td style="font-size:12px;font-weight:500;white-space:nowrap">${rec}</td><td class="ac" style="white-space:nowrap" onclick="event.stopPropagation()">
   <button class="icon-btn" onclick="openHistorico(${im.id})" title="Histórico de contratos"><i class="ti ti-history"></i></button>
   <button class="icon-btn" onclick="openEdit(${im.id})" title="Editar"><i class="ti ti-edit"></i></button>
   <button class="icon-btn del" onclick="delImovel(${im.id})" title="Remover"><i class="ti ti-trash"></i></button>
-</td></tr>`;}).join('')}</tbody></table>`;})()}
-  </div>`;
+</td></tr>`;}).join('')}</tbody></table></div>`;})()}</div>`;
 }
 
 function renderContratos(){
@@ -1069,7 +1118,7 @@ function renderContratos(){
     <button class="btn sm" onclick="window.print()"><i class="ti ti-printer"></i>Imprimir lista</button>
   </div>
   ${filterBar('contratos')}
-  <div class="card"><div class="card-hd"><span class="card-title">Contratos — por vencimento</span></div>${allC.length===0?`<div class="no-data"><i class="ti ti-file-off"></i>Nenhum contrato cadastrado</div>`:sorted.length===0?`<div class="no-data"><i class="ti ti-search"></i>Nenhum resultado encontrado.</div>`:`<table><thead><tr><th>Imóvel</th><th>Proprietário / Inquilino</th><th>Início</th><th>Vencimento</th><th>Prazo</th><th>Receita da imobiliária</th><th></th></tr></thead><tbody>${sorted.map(im=>{const d=dT(im.fimContrato),label=d<0?`Vencido há ${Math.abs(d)}d`:d===0?'Hoje':`${d}d`;const a=im.aluguel||0;const rec=im.status!=='Alugado'?'—':(im.srv==='administracao'?`${fR(a)} + ${fR(a*.1)}/mês (administração)`:`${fR(a)} — locação`);return`<tr style="cursor:pointer" onclick="openDetalhe(${im.id})"><td><div class="tdname">${esc(im.nome)}</div><div class="tdsub">${bS(im)}</div></td><td style="font-size:12px"><div class="tdname">${esc(im.proprietario||'—')}</div><div class="tdsub">${esc(im.inquilino||'—')}</div></td><td style="font-size:12px">${fD(im.inicioContrato)}</td><td style="font-size:12px">${fD(im.fimContrato)}</td><td>${bC(im)} <span style="font-size:11px;color:var(--text2)">${label}</span></td><td style="font-size:12px;font-weight:500;white-space:nowrap">${rec}</td><td class="ac" style="white-space:nowrap" onclick="event.stopPropagation()"><button class="icon-btn" onclick="openRenovar(${im.id})" title="Renovar contrato" style="color:var(--s-text)"><i class="ti ti-refresh"></i></button><button class="icon-btn del" onclick="openEncerrar(${im.id})" title="Encerrar contrato"><i class="ti ti-door-exit"></i></button></td></tr>`;}).join('')}</tbody></table>`}</div>`;
+  <div class="card"><div class="card-hd"><span class="card-title">Contratos — por vencimento</span></div><div class="table-scroll">${allC.length===0?`<div class="no-data"><i class="ti ti-file-off"></i>Nenhum contrato cadastrado</div>`:sorted.length===0?`<div class="no-data"><i class="ti ti-search"></i>Nenhum resultado encontrado.</div>`:`<div class="card-scroll"><table><thead><tr><th>Imóvel</th><th>Proprietário / Inquilino</th><th>Início</th><th>Vencimento</th><th>Prazo</th><th>Receita da imobiliária</th><th></th></tr></thead><tbody>${sorted.map(im=>{const d=dT(im.fimContrato),label=d<0?`Vencido há ${Math.abs(d)}d`:d===0?'Hoje':`${d}d`;const a=im.aluguel||0;const rec=im.status!=='Alugado'?'—':(im.srv==='administracao'?`${fR(a)} + ${fR(a*.1)}/mês (administração)`:`${fR(a)} — locação`);return`<tr style="cursor:pointer" onclick="openDetalhe(${im.id})"><td><div class="tdname">${esc(im.nome)}</div><div class="tdsub">${bS(im)}</div></td><td style="font-size:12px"><div class="tdname">${esc(im.proprietario||'—')}</div><div class="tdsub">${esc(im.inquilino||'—')}</div></td><td style="font-size:12px">${fD(im.inicioContrato)}</td><td style="font-size:12px">${fD(im.fimContrato)}</td><td>${bC(im)} <span style="font-size:11px;color:var(--text2)">${label}</span></td><td style="font-size:12px;font-weight:500;white-space:nowrap">${rec}</td><td class="ac" style="white-space:nowrap" onclick="event.stopPropagation()"><button class="icon-btn" onclick="openRenovar(${im.id})" title="Renovar contrato" style="color:var(--s-text)"><i class="ti ti-refresh"></i></button><button class="icon-btn del" onclick="openEncerrar(${im.id})" title="Encerrar contrato"><i class="ti ti-door-exit"></i></button></td></tr>`;}).join('')}</tbody></table></div>`}</div></div>`;
 }
 
 function renderIptu(){
@@ -1085,7 +1134,7 @@ function renderIptu(){
     <span style="font-size:15px;font-weight:500">IPTU (${allI.length} imóvel${allI.length!==1?'s':''})</span>
     <button class="btn sm" onclick="window.print()"><i class="ti ti-printer"></i>Imprimir lista</button>
   </div>
-  ${searchBox('iptu')}<div class="metrics"><div class="metric"><div class="ml"><i class="ti ti-receipt-2"></i>IPTU anual total</div><div class="mv">${fR(total)}</div></div><div class="metric"><div class="ml"><i class="ti ti-alert-triangle"></i>Vencimento próximo (≤30 dias)</div><div class="mv" style="color:var(--w-text)">${data.imoveis.filter(i=>stI(i)==='crit').length}</div></div></div><div class="card"><div class="card-hd"><span class="card-title">IPTU — por vencimento</span></div>${sorted.length===0?`<div class="no-data"><i class="ti ti-receipt-off"></i>${allI.length===0?'Nenhum IPTU cadastrado':'Nenhum resultado encontrado.'}</div>`:`<table><thead><tr><th>Imóvel</th><th>Proprietário</th><th>IPTU anual</th><th>Vencimento</th><th>Status</th></tr></thead><tbody>${sorted.map(im=>{const d=dT(im.iptuVenc),label=d===null?'':d<0?`Há ${Math.abs(d)}d`:d===0?'Hoje':`${d}d`;return`<tr style="cursor:pointer" onclick="openDetalhe(${im.id})"><td><div class="tdname">${esc(im.nome)}</div><div class="tdsub">${esc(im.endereco||'')}</div></td><td style="font-size:12px">${esc(im.proprietario||'—')}</td><td style="font-size:12px">${im.iptuAnual?fR(im.iptuAnual):'—'}</td><td style="font-size:12px">${fD(im.iptuVenc)}</td><td>${bI(im)} <span style="font-size:11px;color:var(--text2)">${label}</span></td></tr>`;}).join('')}</tbody></table>`}</div>`;
+  ${searchBox('iptu')}<div class="metrics"><div class="metric"><div class="ml"><i class="ti ti-receipt-2"></i>IPTU anual total</div><div class="mv">${fR(total)}</div></div><div class="metric"><div class="ml"><i class="ti ti-alert-triangle"></i>Vencimento próximo (≤30 dias)</div><div class="mv" style="color:var(--w-text)">${data.imoveis.filter(i=>stI(i)==='crit').length}</div></div></div><div class="card"><div class="card-hd"><span class="card-title">IPTU — por vencimento</span></div>${sorted.length===0?`<div class="no-data"><i class="ti ti-receipt-off"></i>${allI.length===0?'Nenhum IPTU cadastrado':'Nenhum resultado encontrado.'}</div>`:`<div class="card-scroll"><table><thead><tr><th>Imóvel</th><th>Proprietário</th><th>IPTU anual</th><th>Vencimento</th><th>Status</th></tr></thead><tbody>${sorted.map(im=>{const d=dT(im.iptuVenc),label=d===null?'':d<0?`Há ${Math.abs(d)}d`:d===0?'Hoje':`${d}d`;return`<tr style="cursor:pointer" onclick="openDetalhe(${im.id})"><td><div class="tdname">${esc(im.nome)}</div><div class="tdsub">${esc(im.endereco||'')}</div></td><td style="font-size:12px">${esc(im.proprietario||'—')}</td><td style="font-size:12px">${im.iptuAnual?fR(im.iptuAnual):'—'}</td><td style="font-size:12px">${fD(im.iptuVenc)}</td><td>${bI(im)} <span style="font-size:11px;color:var(--text2)">${label}</span></td></tr>`;}).join('')}</tbody></table></div>`}</div>`;
 }
 
 function render(){
@@ -1208,8 +1257,8 @@ function renderVendas(){
     <div class="metric"><div class="ml"><i class="ti ti-list"></i>Vendas cadastradas</div><div class="mv">${(data.vendas||[]).length}</div></div>
   </div>
   <div class="card">
-    ${list.length===0?`<div class="no-data"><i class="ti ti-home-off"></i>${(data.vendas||[]).length===0?'Clique em "Nova venda" para começar.':'Nenhum resultado encontrado.'}</div>`:`
-    <table><thead><tr><th>Imóvel</th><th>Proprietário</th><th>Cliente</th><th>Valor total</th><th>Parcelas</th><th></th></tr></thead>
+    <div class="table-scroll">${list.length===0?`<div class="no-data"><i class="ti ti-home-off"></i>${(data.vendas||[]).length===0?'Clique em "Nova venda" para começar.':'Nenhum resultado encontrado.'}</div>`:`
+    <div class="card-scroll"><table><thead><tr><th>Imóvel</th><th>Proprietário</th><th>Cliente</th><th>Valor total</th><th>Parcelas</th><th></th></tr></thead>
     <tbody>${list.map(v=>{
       const parcsHtml=v.parcelas.length===0?'<span style="color:var(--text3)">—</span>':v.parcelas.map(p=>`<div style="font-size:11px;white-space:nowrap">${p.mes?MESES[parseInt(p.mes.split('-')[1])-1]+' '+p.mes.split('-')[0]:'—'}: ${fR(p.valor)}</div>`).join('');
       return`<tr style="cursor:pointer" onclick="openDetalheVenda(${v.id})">
@@ -1219,7 +1268,7 @@ function renderVendas(){
         <td style="font-size:12px;font-weight:500">${fR(v.valorTotal)}</td>
         <td>${parcsHtml}</td>
         <td class="ac"><button class="icon-btn" onclick="openEditVenda(${v.id})" title="Editar"><i class="ti ti-edit"></i></button><button class="icon-btn del" onclick="delVenda(${v.id})" title="Remover"><i class="ti ti-trash"></i></button></td>
-      </tr>`;}).join('')}</tbody></table>`}
+      </tr>`;}).join('')}</tbody></table></div>`}
   </div>`;
 }
 function matchSearchVenda(v){const q=searchQ['vendas'];if(!q)return true;return[v.proprietario,v.cliente,v.imovel].some(x=>x&&x.toLowerCase().includes(q));}
@@ -1336,8 +1385,8 @@ function renderCobrancas(){
     <div class="metric"><div class="ml"><i class="ti ti-cash"></i>Total esperado</div><div class="mv">${fR(totalMes)}</div><div class="ms">${admAtivos.length} imóvel${admAtivos.length!==1?'s':''} em administração</div></div>
   </div>
   <div class="card">
-    ${list.length===0?`<div class="no-data"><i class="ti ti-building-off"></i>${admAtivos.length===0?'Nenhum imóvel em administração neste mês.':'Nenhum resultado encontrado.'}</div>`:`
-    <table><thead><tr><th>Imóvel</th><th>Proprietário</th><th>Aluguel</th><th>Taxa (10%)</th><th>Status</th><th>Ação</th></tr></thead>
+    <div class="table-scroll">${list.length===0?`<div class="no-data"><i class="ti ti-building-off"></i>${admAtivos.length===0?'Nenhum imóvel em administração neste mês.':'Nenhum resultado encontrado.'}</div>`:`
+    <div class="card-scroll"><table><thead><tr><th>Imóvel</th><th>Proprietário</th><th>Aluguel</th><th>Taxa (10%)</th><th>Status</th><th>Ação</th></tr></thead>
     <tbody>${list.map(im=>{
       const pago=isPagoItem(im);
       const taxa=(im._aluguelRef||0)*.1;
@@ -1352,7 +1401,7 @@ function renderCobrancas(){
         <td><button class="btn sm ${pago?'ghost':'primary'}" onclick="event.stopPropagation();togglePagoKey('${key}',${im.id},${curY},${curM})">
           ${pago?'<i class="ti ti-x"></i>Desfazer':'<i class="ti ti-check"></i>Marcar pago'}
         </button></td>
-      </tr>`;}).join('')}</tbody></table>`}
+      </tr>`;}).join('')}</tbody></table></div>`}
   </div>`;
 }
 /* ── Datepicker ── */
