@@ -982,11 +982,7 @@ function renderDashboard(){
     <h2>Gestão Financeira Rose Tejo Imóveis — Visão Geral</h2>
     <p>Gerado em ${new Date().toLocaleDateString('pt-BR')}</p>
   </div>
-  <div style="display:flex;gap:8px;align-items:center;margin-bottom:12px;flex-wrap:wrap" class="no-print">
-    <input data-search="dashboard" type="text" placeholder="Pesquisar por imóvel, proprietário ou inquilino..." value="${esc(searchQ['dashboard'])}" oninput="setSearch('dashboard',this.value)" style="flex:1;min-width:200px;padding:9px 12px;font-size:13px;border:0.5px solid var(--border2);border-radius:var(--r);background:var(--bg);color:var(--text)">
-    <select onchange="setSrvDash(this.value)" style="padding:9px 10px;font-size:13px;border:0.5px solid var(--border2);border-radius:var(--r);background:var(--bg);color:var(--text);min-width:220px">
-      ${[{v:'todos',l:'Todos os serviços'},{v:'inter_completa',l:'Intermediação Completa — 100% do 1º aluguel, sem receita mensal'},{v:'inter_parceria',l:'Intermediação com Parceria — 50% do 1º aluguel, sem receita mensal'},{v:'inter_parcial',l:'Intermediação Parcial — 25% do 1º aluguel, sem receita mensal'},{v:'adm_completa',l:'Administração Completa — 100% do 1º aluguel + 10%/mês'},{v:'adm_parceria',l:'Administração com Parceria — 50% do 1º aluguel + 10%/mês'},{v:'adm_parcial',l:'Administração Parcial — 100% do aluguel 1x por ano'},{v:'adm_parcial_parceria',l:'Administração Parcial com Parceria — 50% do aluguel 1x por ano'}].map(o=>`<option value="${o.v}"${srvFilterDash===o.v?' selected':''}>${o.l}</option>`).join('')}
-    </select>
+  <div style="display:flex;justify-content:flex-end;margin-bottom:12px" class="no-print">
     <button class="btn sm" onclick="window.print()"><i class="ti ti-printer"></i>Imprimir lista</button>
   </div>
   <div class="metrics">
@@ -1005,8 +1001,15 @@ function renderDashboard(){
     ${active.length===0?`<div class="no-data"><i class="ti ti-circle-check"></i>${all2.length===0?'Nenhum alerta. Tudo em dia!':'Todos os alertas foram dispensados.'}</div>`:`<div class="al-list">${active.map(a=>`<div class="al-item ${a.t}"><i class="ti ${a.ic} al-ic"></i><div class="al-body"><div class="al-title">${a.title}</div><div class="al-sub">${a.sub}</div></div><button class="al-dismiss" onclick="dismissAlert('${a.k}')"><i class="ti ti-x"></i></button></div>`).join('')}</div>`}
   </div>
   <div class="card">
-    <div class="card-hd"><span class="card-title">Todos os imóveis</span></div>
-    <div style="padding:12px 16px 0">${searchBox('dashboard')}</div>
+    <div class="card-hd" style="flex-wrap:wrap;gap:8px">
+      <span class="card-title">Todos os imóveis</span>
+      <div style="display:flex;gap:8px;flex:1;min-width:200px;flex-wrap:wrap">
+        <input data-search="dashboard" type="text" placeholder="Pesquisar..." value="${esc(searchQ['dashboard'])}" oninput="setSearch('dashboard',this.value)" style="flex:1;min-width:160px;padding:7px 10px;font-size:13px;border:0.5px solid var(--border2);border-radius:var(--r);background:var(--bg);color:var(--text)">
+        <select onchange="setSrvDash(this.value)" style="padding:7px 10px;font-size:13px;border:0.5px solid var(--border2);border-radius:var(--r);background:var(--bg);color:var(--text);min-width:200px">
+          ${[{v:'todos',l:'Todos os serviços'},{v:'inter_completa',l:'Intermediação Completa'},{v:'inter_parceria',l:'Intermediação com Parceria'},{v:'inter_parcial',l:'Intermediação Parcial'},{v:'adm_completa',l:'Administração Completa'},{v:'adm_parceria',l:'Administração com Parceria'},{v:'adm_parcial',l:'Administração Parcial'},{v:'adm_parcial_parceria',l:'Administração Parcial com Parceria'}].map(o=>`<option value="${o.v}"${srvFilterDash===o.v?' selected':''}>${o.l}</option>`).join('')}
+        </select>
+      </div>
+    </div>
     ${(()=>{const list=sortByProp(data.imoveis.filter(im=>{
     if(!matchSearch('dashboard',im))return false;
     if(srvFilterDash==='todos')return true;
@@ -1018,7 +1021,19 @@ function renderDashboard(){
 }
 
 function renderReceita(){
-  const y=selY,m=selM,linhas=sortByProp(data.imoveis.map(im=>({im,r:recDoMes(im,y,m),proprietario:im.proprietario})).filter(l=>l.r.val>0)).map(l=>({im:l.im,r:l.r}));
+  const y=selY,m=selM;
+  const qRec=(searchQ['receita']||'').toLowerCase();
+  const mostrarVendas=srvFilterRec==='todos'||srvFilterRec==='venda';
+  const vdMes=recVendasDoMes(y,m);
+  const linhasBruto=sortByProp(data.imoveis.map(im=>({im,r:recDoMes(im,y,m),proprietario:im.proprietario})).filter(l=>l.r.val>0)).map(l=>({im:l.im,r:l.r}));
+  const linhas=linhasBruto.filter(({im})=>{
+    if(qRec&&![im.nome,im.proprietario,im.inquilino].some(v=>v&&v.toLowerCase().includes(qRec)))return false;
+    if(srvFilterRec==='todos'||srvFilterRec==='venda')return true;
+    const s=im.srv||'inter_completa';
+    const norm=s==='intermediacao'?'inter_completa':s==='administracao'?'adm_completa':s;
+    return norm===srvFilterRec;
+  });
+  const itensVendaFiltrados=mostrarVendas?vdMes.itens.filter(i=>!qRec||[i.nome,i.proprietario,i.cliente].some(v=>v&&v.toLowerCase().includes(qRec))):[];
   const tAdm=linhas.filter(l=>l.r.tipo==='adm-m').reduce((s,l)=>s+l.r.val,0);
   const tLoc=linhas.filter(l=>l.r.tipo==='inter'||l.r.tipo==='loc').reduce((s,l)=>s+l.r.val,0);
   const total=tAdm+tLoc;
