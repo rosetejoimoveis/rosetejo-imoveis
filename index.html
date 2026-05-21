@@ -137,6 +137,15 @@ tbody tr:hover td{background:var(--bg2)}
 .spin{display:inline-block;animation:spin 1s linear infinite}
 @keyframes spin{to{transform:rotate(360deg)}}
 .pg-load{min-height:60vh;display:flex;align-items:center;justify-content:center;flex-direction:column;gap:12px;color:var(--text2);font-size:14px}
+/* ── Autocomplete ── */
+.ac-wrap{position:relative}
+.ac-list{position:absolute;top:100%;left:0;right:0;z-index:400;background:var(--bg);border:0.5px solid var(--border2);border-radius:var(--r);box-shadow:0 6px 18px rgba(0,0,0,.15);max-height:180px;overflow-y:auto;display:none}
+.ac-list.open{display:block}
+.ac-item{padding:9px 12px;font-size:13px;cursor:pointer;border-bottom:0.5px solid var(--border)}
+.ac-item:last-child{border-bottom:none}
+.ac-item:hover,.ac-item.focused{background:var(--bg2)}
+.ac-item strong{color:var(--text);font-weight:600}
+
 /* ── Datepicker ── */
 .dp-wrap{position:relative;display:inline-block;width:100%}
 .dp-input{width:100%;padding:9px 11px;font-size:13px;border:0.5px solid var(--border2);border-radius:var(--r);background:var(--bg);color:var(--text);cursor:pointer;user-select:none}
@@ -325,13 +334,13 @@ function filterBar(tab){
   const cur=srvFilter[tab]||'todos';
   const opts=[
     {v:'todos',l:'Todos os serviços'},
-    {v:'inter_completa',l:'Intermediação Completa'},
-    {v:'inter_parceria',l:'Intermediação com Parceria'},
-    {v:'inter_parcial',l:'Intermediação Parcial'},
-    {v:'adm_completa',l:'Administração Completa'},
-    {v:'adm_parceria',l:'Administração com Parceria'},
-    {v:'adm_parcial',l:'Administração Parcial'},
-    {v:'adm_parcial_parceria',l:'Administração Parcial com Parceria'},
+    {v:'inter_completa',l:'Intermediação Completa — 100% do 1º aluguel, sem receita mensal'},
+    {v:'inter_parceria',l:'Intermediação com Parceria — 50% do 1º aluguel, sem receita mensal'},
+    {v:'inter_parcial',l:'Intermediação Parcial — 25% do 1º aluguel, sem receita mensal'},
+    {v:'adm_completa',l:'Administração Completa — 100% do 1º aluguel + 10%/mês'},
+    {v:'adm_parceria',l:'Administração com Parceria — 50% do 1º aluguel + 10%/mês'},
+    {v:'adm_parcial',l:'Administração Parcial — 100% do aluguel 1x por ano'},
+    {v:'adm_parcial_parceria',l:'Administração Parcial com Parceria — 50% do aluguel 1x por ano'},
   ];
   return`<div style="display:flex;gap:8px;align-items:center;margin-bottom:14px;flex-wrap:wrap">
     <input data-search="${tab}" type="text" placeholder="Pesquisar por imóvel, proprietário ou inquilino..." value="${esc(searchQ[tab])}" oninput="setSearch('${tab}',this.value)" style="flex:1;min-width:200px;padding:9px 12px;font-size:13px;border:0.5px solid var(--border2);border-radius:var(--r);background:var(--bg);color:var(--text)">
@@ -650,6 +659,28 @@ async function restoreAlerts(){data.dismissedAlerts=[];await persist();render();
 /* ── Badges ── */
 const bC=im=>{const s=stC(im);if(!s)return`<span class="badge neutral">Sem contrato</span>`;if(s==='exp')return`<span class="badge crit"><i class="ti ti-alert-circle"></i>Vencido</span>`;const d=dT(im.fimContrato);if(s==='crit')return`<span class="badge crit"><i class="ti ti-clock"></i>${d}d</span>`;return`<span class="badge ok"><i class="ti ti-check"></i>OK</span>`;};
 const bI=im=>{const s=stI(im);if(!s)return`<span class="badge neutral">—</span>`;if(s==='exp')return`<span class="badge crit">Vencido</span>`;const d=dT(im.iptuVenc);if(s==='crit')return`<span class="badge crit">${d}d</span>`;return`<span class="badge ok"><i class="ti ti-check"></i>OK</span>`;};
+function openDetalheVendaByNome(nome){
+  const v=(data.vendas||[]).find(x=>x.imovel===nome);
+  if(v)openDetalheVenda(v.id);
+}
+function openDetalheVenda(id){
+  const v=(data.vendas||[]).find(x=>x.id===id);
+  if(!v)return;
+  document.getElementById('overlay').style.display='flex';
+  const row=(lbl,val)=>`<div style="display:flex;gap:8px;padding:8px 0;border-bottom:0.5px solid var(--border)"><span style="font-size:12px;color:var(--text2);min-width:140px;flex-shrink:0">${lbl}</span><span style="font-size:13px;font-weight:500">${val||'—'}</span></div>`;
+  const parcsHtml=v.parcelas.length===0?'—':v.parcelas.map((p,i)=>`<div style="font-size:12px">Parcela ${i+1}/${v.parcelas.length}: ${p.mes?MESES_FULL[parseInt(p.mes.split('-')[1])-1]+' '+p.mes.split('-')[0]:'—'} — ${fR(p.valor)}</div>`).join('');
+  document.getElementById('modal').innerHTML=`
+  <h2><i class="ti ti-home-dollar"></i> ${esc(v.imovel)}</h2>
+  ${row('Proprietário (vendedor)',v.proprietario)}
+  ${row('Cliente (comprador)',v.cliente)}
+  ${row('Valor total',fR(v.valorTotal))}
+  ${row('Parcelas',parcsHtml)}
+  <div class="modal-foot">
+    <button class="btn ghost" onclick="closeModal()">Fechar</button>
+    <button class="btn primary" onclick="closeModal();openEditVenda(${id})"><i class="ti ti-edit"></i>Editar</button>
+  </div>`;
+}
+
 function openDetalhe(id){
   const im=data.imoveis.find(i=>i.id===id);
   if(!im)return;
@@ -860,8 +891,7 @@ function renderModal(){
   const isAdm=(F.srv||'inter_completa').startsWith('adm')||F.srv==='administracao';
   document.getElementById('modal').innerHTML=`
   <h2>${editId?'Editar imóvel':'Novo imóvel'}</h2>
-  <div class="slbl">Identificação</div>
-  <div class="form-row"><label>Nome *</label><input value="${esc(F.nome)}" placeholder="Ex: Apto 101 — Ed. Sol Nascente" oninput="F.nome=this.value"></div>
+  <div class="form-row"><label>Identificação do contrato *</label><input value="${esc(F.nome)}" placeholder="Ex: Apto 101 — Ed. Sol Nascente" oninput="F.nome=this.value"></div>
   <div class="form-row"><label>Endereço</label><input value="${esc(F.endereco)}" placeholder="Rua, número, complemento" oninput="F.endereco=this.value"></div>
   <div class="fg">
     <div class="form-row"><label>Tipo</label><select onchange="F.tipo=this.value">${['Residencial','Comercial','Industrial','Terreno'].map(t=>`<option${F.tipo===t?' selected':''}>${t}</option>`).join('')}</select></div>
@@ -872,12 +902,12 @@ function renderModal(){
     <select onchange="F.srv=this.value;updPrev()">
       <optgroup label="── Intermediação ──">
         <option value="inter_completa"${F.srv==='inter_completa'||F.srv==='intermediacao'?' selected':''}>Intermediação Completa — 100% do 1º aluguel</option>
-        <option value="inter_parceria"${F.srv==='inter_parceria'?' selected':''}>Intermediação Completa com Parceria — 50% do 1º aluguel</option>
+        <option value="inter_parceria"${F.srv==='inter_parceria'?' selected':''}>Intermediação com Parceria — 50% do 1º aluguel</option>
         <option value="inter_parcial"${F.srv==='inter_parcial'?' selected':''}>Intermediação Parcial — 25% do 1º aluguel</option>
       </optgroup>
       <optgroup label="── Administração ──">
         <option value="adm_completa"${F.srv==='adm_completa'||F.srv==='administracao'?' selected':''}>Administração Completa — 100% do 1º aluguel + 10%/mês</option>
-        <option value="adm_parceria"${F.srv==='adm_parceria'?' selected':''}>Administração Completa com Parceria — 50% do 1º aluguel + 10%/mês</option>
+        <option value="adm_parceria"${F.srv==='adm_parceria'?' selected':''}>Administração com Parceria — 50% do 1º aluguel + 10%/mês</option>
         <option value="adm_parcial"${F.srv==='adm_parcial'?' selected':''}>Administração Parcial — 100% do 1º aluguel todo ano</option>
         <option value="adm_parcial_parceria"${F.srv==='adm_parcial_parceria'?' selected':''}>Administração Parcial com Parceria — 50% do 1º aluguel todo ano</option>
       </optgroup>
@@ -890,8 +920,8 @@ function renderModal(){
   <div class="info-box ${isAdm?'green':'blue'}" id="fp">${prevRec()}</div>
   <div class="slbl">Partes</div>
   <div class="fg">
-    <div class="form-row"><label>Proprietário</label><input value="${esc(F.proprietario)}" placeholder="Nome" oninput="F.proprietario=this.value"></div>
-    <div class="form-row"><label>Inquilino</label><input value="${esc(F.inquilino)}" placeholder="Nome" oninput="F.inquilino=this.value"></div>
+    <div class="form-row"><label>Proprietário</label>${acInput('ac_prop','proprietario','Nome do proprietário',F.proprietario)}</div>
+    <div class="form-row"><label>Inquilino</label>${acInput('ac_inq','inquilino','Nome do inquilino',F.inquilino)}</div>
   </div>
   <div class="slbl">Contrato &amp; IPTU</div>
   <div class="fg">
@@ -949,7 +979,7 @@ function renderDashboard(){
   <div class="card">
     <div class="card-hd"><span class="card-title">Todos os imóveis</span></div>
     <div style="padding:12px 16px 0">${searchBox('dashboard')}</div>
-    ${(()=>{const list=data.imoveis.filter(im=>matchSearch('dashboard',im));return list.length===0?`<div class="no-data"><i class="ti ti-building-off"></i>${data.imoveis.length===0?'Vá em "Imóveis" → "Novo imóvel" para começar.':'Nenhum resultado encontrado.'}</div>`:`<table><thead><tr><th>Imóvel</th><th>Proprietário</th><th>Serviço</th><th>Aluguel</th><th>Receita da imobiliária</th><th>Contrato</th><th>IPTU</th></tr></thead><tbody>${list.map(im=>{const a=im.aluguel||0;const rec=im.status==='Alugado'?(im.srv==='administracao'?`${fR(a)} + ${fR(a*.1)}/mês (administração)`:`${fR(a)} — locação`):'—';return`<tr><td><div class="tdname">${esc(im.nome)}</div><div class="tdsub">${im.tipo}</div></td><td style="font-size:12px">${esc(im.proprietario||'—')}</td><td>${bS(im)}</td><td style="font-size:12px">${a?fR(a):'—'}</td><td style="font-size:12px">${rec}</td><td>${bC(im)}</td><td>${bI(im)}</td></tr>`;}).join('')}</tbody></table>`;})()}
+    ${(()=>{const list=data.imoveis.filter(im=>matchSearch('dashboard',im));return list.length===0?`<div class="no-data"><i class="ti ti-building-off"></i>${data.imoveis.length===0?'Vá em "Imóveis" → "Novo imóvel" para começar.':'Nenhum resultado encontrado.'}</div>`:`<table><thead><tr><th>Imóvel</th><th>Proprietário</th><th>Serviço</th><th>Aluguel</th><th>Receita da imobiliária</th><th>Contrato</th><th>IPTU</th></tr></thead><tbody>${list.map(im=>{const a=im.aluguel||0;const rec=im.status==='Alugado'?(im.srv==='administracao'?`${fR(a)} + ${fR(a*.1)}/mês (administração)`:`${fR(a)} — locação`):'—';return`<tr style="cursor:pointer" onclick="openDetalhe(${im.id})"><td><div class="tdname">${esc(im.nome)}</div><div class="tdsub">${im.tipo}</div></td><td style="font-size:12px">${esc(im.proprietario||'—')}</td><td>${bS(im)}</td><td style="font-size:12px">${a?fR(a):'—'}</td><td style="font-size:12px">${rec}</td><td>${bC(im)}</td><td>${bI(im)}</td></tr>`;}).join('')}</tbody></table>`;})()}
   </div>`;
 }
 
@@ -982,7 +1012,7 @@ function renderReceita(){
   </div>`;})()}
   <div class="card">
     <div class="card-hd"><span class="card-title">Detalhamento — ${MESES[m-1]} ${y}</span></div>
-    ${(()=>{const vd=recVendasDoMes(y,m);const linhasVenda=vd.itens.map(i=>`<tr><td><div class="tdname">${esc(i.nome)}</div><div class="tdsub">${esc(i.cliente)}</div></td><td><span class="badge purple"><i class="ti ti-home-dollar"></i>Venda</span></td><td style="font-size:12px">${esc(i.proprietario)}</td><td style="font-size:12px;color:var(--text2)">${i.label}</td><td style="text-align:right;font-weight:600;color:var(--s-text)">${fR(i.valor)}</td></tr>`);const totalGeral=total+vd.total;return linhas.length===0&&linhasVenda.length===0?`<div class="no-data"><i class="ti ti-receipt-off"></i>Nenhuma receita para este mês.</div>`:`<table><thead><tr><th>Imóvel</th><th>Tipo</th><th>Proprietário / Inquilino</th><th>Origem</th><th style="text-align:right">Receita</th></tr></thead><tbody>${linhas.map(({im,r})=>`<tr style="cursor:pointer" onclick="openDetalhe(${im.id})"><td><div class="tdname">${esc(im.nome)}</div><div class="tdsub">${esc(im.inquilino||'—')}</div></td><td>${bS(im)}</td><td style="font-size:12px"><div>${esc(im.proprietario||'—')}</div><div style="color:var(--text2);font-size:11px">${esc(im.inquilino||'—')}</div></td><td style="font-size:12px;color:var(--text2)">${r.det}</td><td style="text-align:right;font-weight:600;color:var(--s-text)">${fR(r.val)}</td></tr>`).join('')}${linhasVenda.join('')}<tr class="row-total"><td colspan="4">Total do mês</td><td style="text-align:right;color:var(--s-text)">${fR(totalGeral)}</td></tr></tbody></table>`;})()}
+    ${(()=>{const vd=recVendasDoMes(y,m);const linhasVenda=vd.itens.map(i=>`<tr style="cursor:pointer" onclick="openDetalheVendaByNome('${esc(i.nome)}')"><td><div class="tdname">${esc(i.nome)}</div><div class="tdsub">${esc(i.cliente)}</div></td><td><span class="badge purple"><i class="ti ti-home-dollar"></i>Venda</span></td><td style="font-size:12px">${esc(i.proprietario)}</td><td style="font-size:12px">—</td><td style="font-size:12px;color:var(--text2)">${i.label}</td><td style="text-align:right;font-weight:600;color:var(--s-text)">${fR(i.valor)}</td></tr>`);const totalGeral=total+vd.total;return linhas.length===0&&linhasVenda.length===0?`<div class="no-data"><i class="ti ti-receipt-off"></i>Nenhuma receita para este mês.</div>`:`<table><thead><tr><th>Imóvel</th><th>Tipo</th><th>Proprietário / Inquilino</th><th>Aluguel</th><th>Origem</th><th style="text-align:right">Receita</th></tr></thead><tbody>${linhas.map(({im,r})=>`<tr style="cursor:pointer" onclick="openDetalhe(${im.id})"><td><div class="tdname">${esc(im.nome)}</div><div class="tdsub">${esc(im.inquilino||'—')}</div></td><td>${bS(im)}</td><td style="font-size:12px"><div>${esc(im.proprietario||'—')}</div><div style="color:var(--text2);font-size:11px">${esc(im.inquilino||'—')}</div></td><td style="font-size:12px">${fR(im.aluguel)}</td><td style="font-size:12px;color:var(--text2)">${r.det}</td><td style="text-align:right;font-weight:600;color:var(--s-text)">${fR(r.val)}</td></tr>`).join('')}${linhasVenda.join('')}<tr class="row-total"><td colspan="5">Total do mês</td><td style="text-align:right;color:var(--s-text)">${fR(totalGeral)}</td></tr></tbody></table>`;})()}
   </div>`;
 }
 
@@ -1001,7 +1031,7 @@ function renderImoveis(){
   </div>
   ${filterBar('imoveis')}
   <div class="card">
-    ${(()=>{const list=data.imoveis.filter(im=>matchSearch('imoveis',im));return list.length===0?`<div class="no-data"><i class="ti ti-building-off"></i>${data.imoveis.length===0?'Clique em "Novo imóvel" para começar':'Nenhum resultado encontrado.'}</div>`:`<table><thead><tr><th>Imóvel</th><th>Serviço</th><th>Proprietário / Inquilino</th><th>Aluguel</th><th>Cond.</th><th>Receita da imobiliária</th><th></th></tr></thead><tbody>${list.map(im=>{const a=im.aluguel||0,c=im.condominio||0;const rec=im.status==='Alugado'?(im.srv==='administracao'?`${fR(a)} + ${fR(a*.1)}/mês (administração)`:`${fR(a)} — locação`):'—';return`<tr><td><div class="tdname">${esc(im.nome)}</div><div class="tdsub">${im.tipo} · ${im.status}</div></td><td>${bS(im)}</td><td style="font-size:12px"><div class="tdname">${esc(im.proprietario||'—')}</div><div class="tdsub">${esc(im.inquilino||'—')}</div></td><td style="font-size:12px;white-space:nowrap">${a?fR(a):'—'}</td><td style="font-size:12px;white-space:nowrap">${c?fR(c):'—'}</td><td style="font-size:12px;font-weight:500;white-space:nowrap">${rec}</td><td class="ac" style="white-space:nowrap">
+    ${(()=>{const list=data.imoveis.filter(im=>matchSearch('imoveis',im));return list.length===0?`<div class="no-data"><i class="ti ti-building-off"></i>${data.imoveis.length===0?'Clique em "Novo imóvel" para começar':'Nenhum resultado encontrado.'}</div>`:`<table><thead><tr><th>Imóvel</th><th>Serviço</th><th>Proprietário / Inquilino</th><th>Aluguel</th><th>Cond.</th><th>Receita da imobiliária</th><th></th></tr></thead><tbody>${list.map(im=>{const a=im.aluguel||0,c=im.condominio||0;const rec=im.status==='Alugado'?(im.srv==='administracao'?`${fR(a)} + ${fR(a*.1)}/mês (administração)`:`${fR(a)} — locação`):'—';return`<tr style="cursor:pointer" onclick="openDetalhe(${im.id})"><td><div class="tdname">${esc(im.nome)}</div><div class="tdsub">${im.tipo} · ${im.status}</div></td><td>${bS(im)}</td><td style="font-size:12px"><div class="tdname">${esc(im.proprietario||'—')}</div><div class="tdsub">${esc(im.inquilino||'—')}</div></td><td style="font-size:12px;white-space:nowrap">${a?fR(a):'—'}</td><td style="font-size:12px;white-space:nowrap">${c?fR(c):'—'}</td><td style="font-size:12px;font-weight:500;white-space:nowrap">${rec}</td><td class="ac" style="white-space:nowrap">
   <button class="icon-btn" onclick="openHistorico(${im.id})" title="Histórico de contratos"><i class="ti ti-history"></i></button>
   <button class="icon-btn" onclick="openEdit(${im.id})" title="Editar"><i class="ti ti-edit"></i></button>
   <button class="icon-btn del" onclick="delImovel(${im.id})" title="Remover"><i class="ti ti-trash"></i></button>
@@ -1085,8 +1115,22 @@ function renderModalVenda(){
   document.getElementById('modal').innerHTML=`
   <h2><i class="ti ti-home-dollar"></i> ${editVendaId?'Editar venda':'Nova venda'}</h2>
   <div class="slbl">Partes</div>
-  <div class="form-row"><label>Proprietário (vendedor)</label><input value="${esc(Venda.proprietario)}" placeholder="Nome do proprietário" oninput="Venda.proprietario=this.value"></div>
-  <div class="form-row"><label>Cliente (comprador)</label><input value="${esc(Venda.cliente)}" placeholder="Nome do cliente" oninput="Venda.cliente=this.value"></div>
+  <div class="form-row"><label>Proprietário (vendedor)</label><div class="ac-wrap">
+    <input id="ac_vprop" type="text" value="${esc(Venda.proprietario)}" placeholder="Nome do proprietário"
+      style="width:100%;padding:9px 11px;font-size:13px;border:0.5px solid var(--border2);border-radius:var(--r);background:var(--bg);color:var(--text)"
+      oninput="Venda.proprietario=this.value;acShowVenda('ac_vprop',this.value)"
+      onfocus="acShowVenda('ac_vprop',this.value)"
+      onblur="acHide('ac_vprop')">
+    <div id="ac-list-ac_vprop" class="ac-list"></div>
+  </div></div>
+  <div class="form-row"><label>Cliente (comprador)</label><div class="ac-wrap">
+    <input id="ac_vcli" type="text" value="${esc(Venda.cliente)}" placeholder="Nome do cliente"
+      style="width:100%;padding:9px 11px;font-size:13px;border:0.5px solid var(--border2);border-radius:var(--r);background:var(--bg);color:var(--text)"
+      oninput="Venda.cliente=this.value;acShowVenda('ac_vcli',this.value)"
+      onfocus="acShowVenda('ac_vcli',this.value)"
+      onblur="acHide('ac_vcli')">
+    <div id="ac-list-ac_vcli" class="ac-list"></div>
+  </div></div>
   <div class="form-row"><label>Imóvel</label><input value="${esc(Venda.imovel)}" placeholder="Nome ou endereço do imóvel" oninput="Venda.imovel=this.value"></div>
   <div class="slbl">Valores e parcelas</div>
   <div class="form-row"><label>Valor total negociado (R$)</label><input type="number" min="0" step="0.01" value="${Venda.valorTotal}" placeholder="0,00" oninput="Venda.valorTotal=this.value"></div>
@@ -1149,7 +1193,7 @@ function renderVendas(){
     <table><thead><tr><th>Imóvel</th><th>Proprietário</th><th>Cliente</th><th>Valor total</th><th>Parcelas</th><th></th></tr></thead>
     <tbody>${list.map(v=>{
       const parcsHtml=v.parcelas.length===0?'<span style="color:var(--text3)">—</span>':v.parcelas.map(p=>`<div style="font-size:11px;white-space:nowrap">${p.mes?MESES[parseInt(p.mes.split('-')[1])-1]+' '+p.mes.split('-')[0]:'—'}: ${fR(p.valor)}</div>`).join('');
-      return`<tr>
+      return`<tr style="cursor:pointer" onclick="openDetalheVenda(${v.id})">
         <td><div class="tdname">${esc(v.imovel)}</div></td>
         <td style="font-size:12px">${esc(v.proprietario)}</td>
         <td style="font-size:12px">${esc(v.cliente)}</td>
@@ -1206,7 +1250,9 @@ function renderCobrancas(){
   // (para meses passados onde o contrato já foi encerrado)
   const admAtivos=[];
   data.imoveis.forEach(im=>{
-    if(im.srv!=='administracao')return;
+    // Usar isAdmTipo para pegar TODOS os tipos de administração
+    if(!isAdmTipo(im.srv))return;
+    if(im.status!=='Alugado'&&!(im.historico&&im.historico.length))return;
     if(contratoAtivoNoMes(im)){
       admAtivos.push({...im,_aluguelRef:im.aluguel});
       return;
@@ -1215,13 +1261,14 @@ function renderCobrancas(){
     if(im.historico){
       im.historico.forEach(h=>{
         if(!h.inicioContrato||!h.fimContrato)return;
-        const[hy,hm]=h.inicioContrato.split('-').map(Number);
+        const hp=h.inicioContrato.split('-').map(Number);
+        const hy=hp[0],hm=hp[1];
         if(hy===curY&&hm===curM)return; // mês de início, não cobrar
-        const ini=new Date(h.inicioContrato);
-        const fim=new Date(h.fimContrato);
-        const fimMes=new Date(fim.getFullYear(),fim.getMonth(),1);
-        if(ini<=mesRef&&fimMes>=mesRef){
-          // Criar entrada virtual para esse histórico
+        const fp=h.fimContrato.split('-').map(Number);
+        // Contrato cobre o mês selecionado?
+        const iniOk=hy<curY||(hy===curY&&hm<=curM);
+        const fimOk=fp[0]>curY||(fp[0]===curY&&fp[1]>=curM);
+        if(iniOk&&fimOk){
           admAtivos.push({...im,_aluguelRef:h.aluguel,_histKey:`hist_${im.id}_${hy}_${hm}`});
         }
       });
@@ -1283,7 +1330,7 @@ function renderCobrancas(){
         <td style="font-size:12px">${fR(im._aluguelRef)}</td>
         <td style="font-size:12px;font-weight:500">${fR(taxa)}</td>
         <td>${pago?`<span class="badge ok"><i class="ti ti-check"></i>Pago${dataPag?' em '+fD(dataPag):''}</span>`:`<span class="badge warn"><i class="ti ti-clock"></i>Pendente</span>`}</td>
-        <td><button class="btn sm ${pago?'ghost':'primary'}" onclick="togglePagoKey('${key}',${im.id},${curY},${curM})">
+        <td><button class="btn sm ${pago?'ghost':'primary'}" onclick="event.stopPropagation();togglePagoKey('${key}',${im.id},${curY},${curM})">
           ${pago?'<i class="ti ti-x"></i>Desfazer':'<i class="ti ti-check"></i>Marcar pago'}
         </button></td>
       </tr>`;}).join('')}</tbody></table>`}
@@ -1408,6 +1455,94 @@ function dpInput(field,placeholder){
   return`<div class="dp-wrap">
     <input id="dp-inp-${field}" class="dp-input" readonly value="${val}" placeholder="${placeholder}" onclick="dpOpen2('${field}')">
     <div id="dp-cal-popup-${field}"></div>
+  </div>`;
+}
+
+/* ── Autocomplete de pessoas ── */
+function getPessoas(){
+  const set=new Set();
+  (data.imoveis||[]).forEach(im=>{
+    if(im.proprietario&&im.proprietario.trim())set.add(im.proprietario.trim());
+    if(im.inquilino&&im.inquilino.trim())set.add(im.inquilino.trim());
+  });
+  (data.vendas||[]).forEach(v=>{
+    if(v.proprietario&&v.proprietario.trim())set.add(v.proprietario.trim());
+    if(v.cliente&&v.cliente.trim())set.add(v.cliente.trim());
+  });
+  return [...set].sort((a,b)=>a.localeCompare(b,'pt-BR'));
+}
+
+function acShow(inputId,field,val){
+  const q=(val||'').toLowerCase().trim();
+  const listEl=document.getElementById('ac-list-'+inputId);
+  if(!listEl)return;
+  if(!q){listEl.classList.remove('open');return;}
+  const pessoas=getPessoas();
+  const matches=pessoas.filter(p=>p.toLowerCase().includes(q)&&p.toLowerCase()!==q);
+  if(!matches.length){listEl.classList.remove('open');return;}
+  listEl.innerHTML='';
+  matches.slice(0,8).forEach(p=>{
+    const idx=p.toLowerCase().indexOf(q);
+    const el=document.createElement('div');
+    el.className='ac-item';
+    el.innerHTML=p.slice(0,idx)+'<strong>'+p.slice(idx,idx+q.length)+'</strong>'+p.slice(idx+q.length);
+    el.addEventListener('mousedown',function(e){e.preventDefault();acSelect(inputId,field,p);});
+    listEl.appendChild(el);
+  });
+  listEl.classList.add('open');
+}
+
+function acSelect(inputId,field,val){
+  F[field]=val;
+  const inp=document.getElementById(inputId);
+  if(inp)inp.value=val;
+  const listEl=document.getElementById('ac-list-'+inputId);
+  if(listEl)listEl.classList.remove('open');
+  updPrev();
+}
+
+function acShowVenda(inputId,val){
+  const q=(val||'').toLowerCase().trim();
+  const listEl=document.getElementById('ac-list-'+inputId);
+  if(!listEl)return;
+  if(!q){listEl.classList.remove('open');return;}
+  const pessoas=getPessoas();
+  const matches=pessoas.filter(p=>p.toLowerCase().includes(q)&&p.toLowerCase()!==q);
+  if(!matches.length){listEl.classList.remove('open');return;}
+  const field=inputId==='ac_vprop'?'proprietario':'cliente';
+  listEl.innerHTML='';
+  matches.slice(0,8).forEach(p=>{
+    const idx=p.toLowerCase().indexOf(q);
+    const el=document.createElement('div');
+    el.className='ac-item';
+    el.innerHTML=p.slice(0,idx)+'<strong>'+p.slice(idx,idx+q.length)+'</strong>'+p.slice(idx+q.length);
+    el.addEventListener('mousedown',function(e){
+      e.preventDefault();
+      Venda[field]=p;
+      const inp=document.getElementById(inputId);
+      if(inp)inp.value=p;
+      acHide(inputId);
+    });
+    listEl.appendChild(el);
+  });
+  listEl.classList.add('open');
+}
+
+function acHide(inputId){
+  setTimeout(()=>{
+    const listEl=document.getElementById('ac-list-'+inputId);
+    if(listEl)listEl.classList.remove('open');
+  },150);
+}
+
+function acInput(inputId,field,placeholder,val){
+  return`<div class="ac-wrap">
+    <input id="${inputId}" type="text" value="${esc(val||'')}" placeholder="${placeholder}"
+      style="width:100%;padding:9px 11px;font-size:13px;border:0.5px solid var(--border2);border-radius:var(--r);background:var(--bg);color:var(--text)"
+      oninput="F['${field}']=this.value;acShow('${inputId}','${field}',this.value)"
+      onfocus="acShow('${inputId}','${field}',this.value)"
+      onblur="acHide('${inputId}')">
+    <div id="ac-list-${inputId}" class="ac-list"></div>
   </div>`;
 }
 
