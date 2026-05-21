@@ -982,7 +982,8 @@ function renderDashboard(){
     <h2>Gestão Financeira Rose Tejo Imóveis — Visão Geral</h2>
     <p>Gerado em ${new Date().toLocaleDateString('pt-BR')}</p>
   </div>
-  <div style="display:flex;gap:8px;align-items:center;justify-content:space-between;margin-bottom:12px;flex-wrap:wrap" class="no-print">
+  <div style="display:flex;gap:8px;align-items:center;margin-bottom:12px;flex-wrap:wrap" class="no-print">
+    <input data-search="dashboard" type="text" placeholder="Pesquisar por imóvel, proprietário ou inquilino..." value="${esc(searchQ['dashboard'])}" oninput="setSearch('dashboard',this.value)" style="flex:1;min-width:200px;padding:9px 12px;font-size:13px;border:0.5px solid var(--border2);border-radius:var(--r);background:var(--bg);color:var(--text)">
     <select onchange="setSrvDash(this.value)" style="padding:9px 10px;font-size:13px;border:0.5px solid var(--border2);border-radius:var(--r);background:var(--bg);color:var(--text);min-width:220px">
       ${[{v:'todos',l:'Todos os serviços'},{v:'inter_completa',l:'Intermediação Completa — 100% do 1º aluguel, sem receita mensal'},{v:'inter_parceria',l:'Intermediação com Parceria — 50% do 1º aluguel, sem receita mensal'},{v:'inter_parcial',l:'Intermediação Parcial — 25% do 1º aluguel, sem receita mensal'},{v:'adm_completa',l:'Administração Completa — 100% do 1º aluguel + 10%/mês'},{v:'adm_parceria',l:'Administração com Parceria — 50% do 1º aluguel + 10%/mês'},{v:'adm_parcial',l:'Administração Parcial — 100% do aluguel 1x por ano'},{v:'adm_parcial_parceria',l:'Administração Parcial com Parceria — 50% do aluguel 1x por ano'}].map(o=>`<option value="${o.v}"${srvFilterDash===o.v?' selected':''}>${o.l}</option>`).join('')}
     </select>
@@ -1068,14 +1069,16 @@ function renderReceita(){
   <div class="metrics" style="grid-template-columns:1fr;margin-bottom:18px">
     <div class="metric ${totalGeral>0?'hl':''}"><div class="ml"><i class="ti ti-cash"></i>Total do mês — ${MESES[m-1]} ${y}</div><div class="mv">${fR(totalGeral)}</div><div class="ms">${linhas.length} locação/administração${tVenda>0?' + '+vd.itens.length+' venda(s)':''}</div></div>
   </div>`;})()}
-  <div style="display:flex;gap:8px;align-items:center;margin-bottom:14px;flex-wrap:wrap" class="no-print">
-    <input data-search="receita" type="text" placeholder="Pesquisar por imóvel, proprietário ou inquilino..." value="${esc(searchQ['receita'])}" oninput="setSearchRec(this.value)" style="flex:1;min-width:200px;padding:9px 12px;font-size:13px;border:0.5px solid var(--border2);border-radius:var(--r);background:var(--bg);color:var(--text)">
-    <select onchange="setSrvRec(this.value)" style="padding:9px 10px;font-size:13px;border:0.5px solid var(--border2);border-radius:var(--r);background:var(--bg);color:var(--text);min-width:220px">
-      ${[{v:'todos',l:'Todos os serviços'},{v:'inter_completa',l:'Intermediação Completa — 100% do 1º aluguel, sem receita mensal'},{v:'inter_parceria',l:'Intermediação com Parceria — 50% do 1º aluguel, sem receita mensal'},{v:'inter_parcial',l:'Intermediação Parcial — 25% do 1º aluguel, sem receita mensal'},{v:'adm_completa',l:'Administração Completa — 100% do 1º aluguel + 10%/mês'},{v:'adm_parceria',l:'Administração com Parceria — 50% do 1º aluguel + 10%/mês'},{v:'adm_parcial',l:'Administração Parcial — 100% do aluguel 1x por ano'},{v:'adm_parcial_parceria',l:'Administração Parcial com Parceria — 50% do aluguel 1x por ano'},{v:'venda',l:'Vendas'}].map(o=>`<option value="${o.v}"${srvFilterRec===o.v?' selected':''}>${o.l}</option>`).join('')}
-    </select>
-  </div>
   <div class="card">
-    <div class="card-hd"><span class="card-title">Detalhamento — ${MESES[m-1]} ${y}</span></div>
+    <div class="card-hd" style="flex-wrap:wrap;gap:8px">
+      <span class="card-title">Detalhamento — ${MESES[m-1]} ${y}</span>
+      <div style="display:flex;gap:8px;flex:1;min-width:200px;flex-wrap:wrap">
+        <input data-search="receita" type="text" placeholder="Pesquisar..." value="${esc(searchQ['receita'])}" oninput="setSearchRec(this.value)" style="flex:1;min-width:160px;padding:7px 10px;font-size:13px;border:0.5px solid var(--border2);border-radius:var(--r);background:var(--bg);color:var(--text)">
+        <select onchange="setSrvRec(this.value)" style="padding:7px 10px;font-size:13px;border:0.5px solid var(--border2);border-radius:var(--r);background:var(--bg);color:var(--text);min-width:200px">
+          ${[{v:'todos',l:'Todos os serviços'},{v:'inter_completa',l:'Intermediação Completa'},{v:'inter_parceria',l:'Intermediação com Parceria'},{v:'inter_parcial',l:'Intermediação Parcial'},{v:'adm_completa',l:'Administração Completa'},{v:'adm_parceria',l:'Administração com Parceria'},{v:'adm_parcial',l:'Administração Parcial'},{v:'adm_parcial_parceria',l:'Administração Parcial com Parceria'},{v:'venda',l:'Vendas'}].map(o=>`<option value="${o.v}"${srvFilterRec===o.v?' selected':''}>${o.l}</option>`).join('')}
+        </select>
+      </div>
+    </div>
     ${(linhas.length===0&&itensVendaFiltrados.length===0)?'<div class="no-data"><i class="ti ti-receipt-off"></i>Nenhuma receita para este mês.</div>':
       ('<div class="card-scroll"><table><thead><tr><th>Imóvel</th><th>Tipo</th><th>Proprietário / Inquilino</th><th>Aluguel</th><th>Origem</th><th style="text-align:right">Receita</th></tr></thead><tbody>'+
       linhasHtml+linhasVendaHtml+
@@ -1374,7 +1377,6 @@ function renderCobrancas(){
     <h2>Cobranças de Administrações — ${MESES[curM-1]} ${curY}</h2>
     <p>Gerado em ${new Date().toLocaleDateString('pt-BR')} · Total esperado: ${fR(totalMes)} · Recebido: ${fR(totalPago)} · Pendente: ${fR(totalPendente)}</p>
   </div>
-  <div class="no-print">${searchBox('cobrancas')}</div>
   <div class="metrics" style="grid-template-columns:repeat(3,1fr)">
     <div class="metric hl"><div class="ml"><i class="ti ti-check"></i>Recebido</div><div class="mv">${fR(totalPago)}</div><div class="ms">${admAtivos.filter(im=>isPagoItem(im)).length} pago${admAtivos.filter(im=>isPagoItem(im)).length!==1?'s':''}</div></div>
     <div class="metric" style="${totalPendente>0?'background:var(--w-bg);border-color:var(--w-border)':''}">
@@ -1384,6 +1386,7 @@ function renderCobrancas(){
     </div>
     <div class="metric"><div class="ml"><i class="ti ti-cash"></i>Total esperado</div><div class="mv">${fR(totalMes)}</div><div class="ms">${admAtivos.length} imóvel${admAtivos.length!==1?'s':''} em administração</div></div>
   </div>
+  <div class="no-print" style="margin-bottom:14px"><input data-search="cobrancas" type="text" placeholder="Pesquisar por imóvel, proprietário ou inquilino..." value="${esc(searchQ['cobrancas'])}" oninput="setSearch('cobrancas',this.value)" style="width:100%;padding:9px 12px;font-size:13px;border:0.5px solid var(--border2);border-radius:var(--r);background:var(--bg);color:var(--text)"></div>
   <div class="card">
     <div class="table-scroll">${list.length===0?`<div class="no-data"><i class="ti ti-building-off"></i>${admAtivos.length===0?'Nenhum imóvel em administração neste mês.':'Nenhum resultado encontrado.'}</div>`:`
     <div class="card-scroll"><table><thead><tr><th>Imóvel</th><th>Proprietário</th><th>Aluguel</th><th>Taxa (10%)</th><th>Status</th><th>Ação</th></tr></thead>
