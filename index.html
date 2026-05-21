@@ -736,7 +736,7 @@ function closeModal(){document.getElementById('overlay').style.display='none';}
 let Ren={id:null,inicioContrato:'',fimContrato:'',aluguel:''};
 function openRenovar(id){
   const im=data.imoveis.find(i=>i.id===id);
-  Ren={id,inicioContrato:'',fimContrato:'',aluguel:im.aluguel||''};
+  Ren={id,inicioContrato:'',fimContrato:'',aluguel:im.aluguel||'',srv:im.srv||'inter_completa'};
   document.getElementById('overlay').style.display='flex';
   renderModalRenovacao(im);
 }
@@ -753,6 +753,21 @@ function renderModalRenovacao(im){
     <div class="form-row"><label>Início da renovação</label><div class="dp-wrap"><input id="dp-inp-renIni" class="dp-input" readonly value="${Ren.inicioContrato?isoToDisp(Ren.inicioContrato):''}" placeholder="dd/mm/aaaa" onclick="dpOpenRen('renIni')"></div></div>
     <div class="form-row"><label>Novo vencimento</label><div class="dp-wrap"><input id="dp-inp-renFim" class="dp-input" readonly value="${Ren.fimContrato?isoToDisp(Ren.fimContrato):''}" placeholder="dd/mm/aaaa" onclick="dpOpenRen('renFim')"></div></div>
   </div>
+  <div class="slbl">Tipo de serviço</div>
+  <div class="form-row"><label>Tipo de serviço na renovação</label>
+    <select onchange="Ren.srv=this.value" style="width:100%;padding:9px 11px;font-size:13px;border:0.5px solid var(--border2);border-radius:var(--r);background:var(--bg);color:var(--text)">
+      <optgroup label="── Intermediação ──">
+        <option value="inter_completa"${Ren.srv==='inter_completa'||Ren.srv==='intermediacao'?' selected':''}>Intermediação Completa — 100% do 1º aluguel</option>
+        <option value="inter_parceria"${Ren.srv==='inter_parceria'?' selected':''}>Intermediação com Parceria — 50% do 1º aluguel</option>
+        <option value="inter_parcial"${Ren.srv==='inter_parcial'?' selected':''}>Intermediação Parcial — 25% do 1º aluguel</option>
+      </optgroup>
+      <optgroup label="── Administração ──">
+        <option value="adm_completa"${Ren.srv==='adm_completa'||Ren.srv==='administracao'?' selected':''}>Administração Completa — 100% do 1º aluguel + 10%/mês</option>
+        <option value="adm_parceria"${Ren.srv==='adm_parceria'?' selected':''}>Administração com Parceria — 50% do 1º aluguel + 10%/mês</option>
+        <option value="adm_parcial"${Ren.srv==='adm_parcial'?' selected':''}>Administração Parcial — 100% do 1º aluguel todo ano</option>
+        <option value="adm_parcial_parceria"${Ren.srv==='adm_parcial_parceria'?' selected':''}>Administração Parcial com Parceria — 50% do 1º aluguel todo ano</option>
+      </optgroup>
+    </select></div>
   <div class="slbl">Valores</div>
   <div class="form-row"><label>Novo valor do aluguel (R$)</label>
     <input type="number" min="0" step="0.01" value="${Ren.aluguel}" placeholder="${fR(im.aluguel)}" oninput="Ren.aluguel=this.value">
@@ -782,6 +797,7 @@ async function salvarRenovacao(){
   im.inicioContrato=Ren.inicioContrato;
   im.fimContrato=Ren.fimContrato;
   if(Ren.aluguel)im.aluguel=Number(Ren.aluguel);
+  if(Ren.srv)im.srv=Ren.srv;
   // Marcar como renovação no histórico do novo contrato
   im.historico[im.historico.length-1].tipo='encerrado';
   closeModal();
