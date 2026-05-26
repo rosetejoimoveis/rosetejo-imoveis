@@ -542,7 +542,7 @@ function recVendasDoMes(y,m){
       if(p.mes===mesStr){
         total+=p.valor;
         const label=nParc===1?'Parcela única':`Parcela ${idx+1}/${nParc}`;
-        itens.push({nome:v.imovel,proprietario:v.proprietario,cliente:v.cliente,valor:p.valor,label});
+        itens.push({id:v.id,nome:v.imovel,proprietario:v.proprietario,cliente:v.cliente,valor:p.valor,label});
       }
     });
   });
@@ -1051,10 +1051,9 @@ function renderReceita(){
       '</tr>';
   }).join('');
   const linhasVendaHtml=itensVendaFiltrados.map(i=>{
-    const nomeEsc=esc(i.nome);
-    const onclk='openDetalheVendaByNome("'+nomeEsc+'")';
+    const onclk='openDetalheVenda('+i.id+')';
     return'<tr style="cursor:pointer" onclick="'+onclk+'">'+
-      '<td><div class="tdname">'+nomeEsc+'</div><div class="tdsub">'+esc(i.cliente)+'</div></td>'+
+      '<td><div class="tdname">'+esc(i.nome)+'</div><div class="tdsub">'+esc(i.cliente)+'</div></td>'+
       '<td><span class="badge purple"><i class="ti ti-home-dollar"></i>Venda</span></td>'+
       '<td style="font-size:12px">'+esc(i.proprietario)+'</td>'+
       '<td style="font-size:12px">—</td>'+
@@ -1076,11 +1075,11 @@ function renderReceita(){
     <h2>Receita por Mês — ${MESES[m-1]} ${y}</h2>
     <p>Gerado em ${new Date().toLocaleDateString('pt-BR')}</p>
   </div>
-  ${(()=>{const tVenda=vdMes.total;const totalGeral=total+tVenda;return`
+  ${(()=>{const tVenda=vdMes.total;const totalGeral=total+tVenda;const nLoc=linhas.filter(l=>l.r.tipo==='loc'||l.r.tipo==='inter').length;const nAdm=linhas.filter(l=>l.r.tipo==='adm-m').length;const nVenda=itensVendaFiltrados.length;return`
   <div class="metrics" style="grid-template-columns:repeat(3,1fr);margin-bottom:10px">
     <div class="metric ${tLoc>0?'hl':''}"><div class="ml"><i class="ti ti-handshake"></i>Locação (1º aluguel)</div><div class="mv">${fR(tLoc)}</div><div class="ms">${tLoc>0?'primeiro aluguel recebido':'sem contratos novos'}</div></div>
     <div class="metric ${tAdm>0?'hl':''}"><div class="ml"><i class="ti ti-settings"></i>Administração</div><div class="mv">${fR(tAdm)}</div><div class="ms">${tAdm>0?'10% mensal recorrente':'sem imóveis administrados ativos'}</div></div>
-    <div class="metric ${tVenda>0?'hl':''}"><div class="ml"><i class="ti ti-home-dollar"></i>Vendas</div><div class="mv">${fR(tVenda)}</div><div class="ms">${tVenda>0?vd.itens.length+' parcela'+(vd.itens.length!==1?'s':'')+ ' recebida'+(vd.itens.length!==1?'s':''):'sem vendas neste mês'}</div></div>
+    <div class="metric ${tVenda>0?'hl':''}"><div class="ml"><i class="ti ti-home-dollar"></i>Vendas</div><div class="mv">${fR(tVenda)}</div><div class="ms">${tVenda>0?nVenda+' parcela'+(nVenda!==1?'s':''):'sem vendas neste mês'}</div></div>
   </div>
   <div class="metrics" style="grid-template-columns:1fr;margin-bottom:18px">
     <div class="metric ${totalGeral>0?'hl':''}"><div class="ml"><i class="ti ti-cash"></i>Total do mês — ${MESES[m-1]} ${y}</div><div class="mv">${fR(totalGeral)}</div><div class="ms">${linhas.length} locação/administração${tVenda>0?' + '+vd.itens.length+' venda(s)':''}</div></div>
