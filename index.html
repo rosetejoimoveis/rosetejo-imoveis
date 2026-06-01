@@ -140,6 +140,10 @@ tbody tr:hover td{background:var(--bg2)}
 .spin{display:inline-block;animation:spin 1s linear infinite}
 @keyframes spin{to{transform:rotate(360deg)}}
 .pg-load{min-height:60vh;display:flex;align-items:center;justify-content:center;flex-direction:column;gap:12px;color:var(--text2);font-size:14px}
+.ck-item-drag{cursor:grab;user-select:none}
+.ck-item-drag:active{cursor:grabbing}
+.ck-drag-over{border-top:2px solid var(--s-text)!important}
+.ck-dragging{opacity:.4}
 /* ── Autocomplete ── */
 .ac-wrap{position:relative}
 .ac-list{position:absolute;top:100%;left:0;right:0;z-index:400;background:var(--bg);border:0.5px solid var(--border2);border-radius:var(--r);box-shadow:0 6px 18px rgba(0,0,0,.15);max-height:180px;overflow-y:auto;display:none}
@@ -193,7 +197,7 @@ tbody tr:hover td{background:var(--bg2)}
 
 <div id="setupScreen" class="setup-wrap" style="display:none;visibility:hidden">
   <div class="setup-box">
-    <div style="display:flex;align-items:center;gap:12px;margin-bottom:0"><img src="${LOGO_SRC()}" alt="Rose Tejo Imóveis" style="height:48px;width:auto;object-fit:contain;"><h1 style="border:none;padding:0;margin:0">Gestão Financeira<br>Rose Tejo Imóveis</h1></div>
+    <div style="display:flex;align-items:center;gap:12px;margin-bottom:0"><img src="" data-logo="1" alt="Rose Tejo Imóveis" style="height:48px;width:auto;object-fit:contain;"><h1 style="border:none;padding:0;margin:0">Gestão Financeira<br>Rose Tejo Imóveis</h1></div>
     <p class="setup-sub">Configure o banco de dados uma vez — depois toda a equipe compartilha os mesmos dados, sem depender do Claude.</p>
 
     <div class="step">
@@ -255,7 +259,7 @@ create policy "equipe" on imob_dados
   <div class="shell">
     <header>
       <div class="logo">
-        <img src="${LOGO_SRC()}" alt="Rose Tejo Imóveis" style="height:44px;width:auto;object-fit:contain;">
+        <img src="" data-logo="1" alt="Rose Tejo Imóveis" style="height:44px;width:auto;object-fit:contain;">
         <div>
           <h1>Gestão Financeira Rose Tejo Imóveis</h1>
         </div>
@@ -277,6 +281,7 @@ create policy "equipe" on imob_dados
       <button class="tab" id="tab_iptu" onclick="go('iptu')"><i class="ti ti-receipt-2"></i>IPTU</button>
       <button class="tab" id="tab_vendas" onclick="go('vendas')"><i class="ti ti-home-dollar"></i>Vendas</button>
       <button class="tab" id="tab_cobrancas" onclick="go('cobrancas')"><i class="ti ti-checkbox"></i>Cobranças de Administrações</button>
+      <button class="tab" id="tab_checklist" onclick="go('checklist')"><i class="ti ti-checklist"></i>Checklist</button>
     </nav>
 
     <div id="content"><div class="pg-load"><i class="ti ti-loader-2 spin" style="font-size:28px"></i>Carregando dados...</div></div>
@@ -316,17 +321,19 @@ async function dbLoad(){
   return rows[0].payload;
 }
 async function dbSave(payload){
-  const r=await fetch(SURL+'/rest/v1/imob_dados?id=eq.1',{method:'PATCH',headers:hdrs(),body:JSON.stringify({payload,updated_at:new Date().toISOString()})});
+  const now=new Date().toISOString();
+  const r=await fetch(SURL+'/rest/v1/imob_dados?id=eq.1',{method:'PATCH',headers:{...hdrs(),'Prefer':'return=representation'},body:JSON.stringify({payload,updated_at:now})});
   if(!r.ok)throw new Error('HTTP '+r.status);
+  try{const rows=await r.json();return rows[0]||{updated_at:now};}catch{return{updated_at:now};}
 }
 
 /* ── State ── */
 const MESES=['Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'];
 const today=new Date();
-let data={imoveis:[],nextId:1,dismissedAlerts:[],vendas:[],pagamentos:{},nextVendaId:1};
+let data={imoveis:[],nextId:1,dismissedAlerts:[],vendas:[],pagamentos:{},nextVendaId:1,checklists:[],nextCheckId:1};
 let curTab='dashboard',selY=today.getFullYear(),selM=today.getMonth()+1;
 let F={},editId=null,busy=false;
-let searchQ={dashboard:'',receita:'',imoveis:'',contratos:'',iptu:'',vendas:'',cobrancas:''};
+let searchQ={dashboard:'',receita:'',imoveis:'',contratos:'',iptu:'',vendas:'',cobrancas:'',checklist:''};
 // filtros extras para receita e visão geral
 let srvFilterDash='todos',srvFilterRec='todos';
 let cobY=today.getFullYear(),cobM=today.getMonth()+1;
@@ -336,7 +343,7 @@ function setCobMonth(v){if(!v)return;const[y,m]=v.split('-').map(Number);cobY=y;
 let srvFilter={imoveis:'todos',contratos:'todos'};
 function setSrv(tab,v){srvFilter[tab]=v;render();const inp=document.querySelector(`input[data-search="${tab}"]`);if(inp){inp.focus();}}
 function setSrvDash(v){srvFilterDash=v;render();}
-function setSrvRec(v){srvFilterRec=v;render();}
+function setSrvRec(v){srvFilterRec=(srvFilterRec===v)?'todos':v;render();}
 function setSearchRec(v){searchQ['receita']=v.toLowerCase();render();const inp=document.querySelector('input[data-search="receita"]');if(inp){inp.focus();inp.setSelectionRange(inp.value.length,inp.value.length);}}
 function setSearch(tab,v){searchQ[tab]=v.toLowerCase();render();const inp=document.querySelector(`input[data-search="${tab}"]`);if(inp){inp.focus();inp.setSelectionRange(inp.value.length,inp.value.length);}}
 function searchBox(tab){return`<div style="margin-bottom:14px"><input data-search="${tab}" type="text" placeholder="Pesquisar por imóvel, proprietário ou inquilino..." value="${esc(searchQ[tab])}" oninput="setSearch('${tab}',this.value)" style="width:100%;padding:9px 12px;font-size:13px;border:0.5px solid var(--border2);border-radius:var(--r);background:var(--bg);color:var(--text)"></div>`;}
@@ -401,16 +408,56 @@ async function refreshData(){
       if(!i.srv)i.srv='inter_completa'; else if(i.srv==='intermediacao')i.srv='inter_completa'; else if(i.srv==='administracao')i.srv='adm_completa';
       if(i.condominio===undefined)i.condominio=0;
       if(!i.historico)i.historico=[];
+      if(!i.recLoc)i.recLoc='auto';
+      if(!i.recLocParcelas)i.recLocParcelas=[{mes:'',valor:''}];
     });
     if(!data.vendas)data.vendas=[];
     if(!data.pagamentos)data.pagamentos={};
     if(!data.nextVendaId)data.nextVendaId=1;
+    if(!data.checklists)data.checklists=[];
+    if(!data.nextCheckId)data.nextCheckId=1;
+    lastSavedAt=''; // vai ser setado no próximo persist
     setSyncPill('ok','Sincronizado');updateHeader();render();
   }catch(e){setSyncPill('err','Erro de conexão');toast('err',e.message,6000);}
 }
+let lastSavedAt=''; // updated_at da última carga/save
+
+async function dbGetUpdatedAt(){
+  try{
+    const r=await fetch(SURL+'/rest/v1/imob_dados?id=eq.1&select=updated_at',{headers:{'apikey':SKEY,'Authorization':'Bearer '+SKEY}});
+    if(!r.ok)return null;
+    const rows=await r.json();
+    return rows[0]?.updated_at||null;
+  }catch{return null;}
+}
+
 async function persist(){
   if(busy)return;busy=true;toast('saving','Salvando...');
-  try{await dbSave(data);toast('saved','Salvo para toda a equipe ✓');setSyncPill('ok','Sincronizado');}
+  try{
+    // Verificar se houve mudança no banco desde a última carga
+    const remoteAt=await dbGetUpdatedAt();
+    if(remoteAt&&lastSavedAt&&remoteAt!==lastSavedAt){
+      // Outro usuário salvou depois de nós — recarregar e aplicar merge
+      toast('warn','Outro usuário editou. Sincronizando...', 3000);
+      const remoteData=await dbLoad();
+      // Merge: manter os imóveis do banco remoto e adicionar/atualizar com os nossos
+      const remoteIds=new Set((remoteData.imoveis||[]).map(i=>i.id));
+      const localIds=new Set((data.imoveis||[]).map(i=>i.id));
+      // Imóveis que estão no local mas não no remoto = foram adicionados por nós
+      const novosNossos=(data.imoveis||[]).filter(i=>!remoteIds.has(i.id));
+      // Usar base remota + nossos novos + nextId maior dos dois
+      data.imoveis=[...(remoteData.imoveis||[]),...novosNossos];
+      data.nextId=Math.max(data.nextId||1,remoteData.nextId||1);
+      data.vendas=[...(remoteData.vendas||[]),...(data.vendas||[]).filter(v=>!(remoteData.vendas||[]).find(rv=>rv.id===v.id))];
+      data.pagamentos={...(remoteData.pagamentos||{}),...(data.pagamentos||{})};
+      data.nextVendaId=Math.max(data.nextVendaId||1,remoteData.nextVendaId||1);
+    }
+    const saved=await dbSave(data);
+    lastSavedAt=saved?.updated_at||new Date().toISOString();
+    toast('saved','Salvo para toda a equipe ✓');
+    setSyncPill('ok','Sincronizado');
+    render();
+  }
   catch(e){toast('err','Erro ao salvar: '+e.message,6000);setSyncPill('err','Erro');}
   busy=false;
 }
@@ -474,23 +521,43 @@ function recDoMes(im,y,m){
     return true;
   }
 
+  // ── Verificar recebimento personalizado (afeta só o 1º aluguel) ──
+  if(im.recLoc==='custom'&&im.recLocParcelas&&im.recLocParcelas.length){
+    const mesStr=`${String(y).padStart(4,'0')}-${String(m).padStart(2,'0')}`;
+    const nParc=im.recLocParcelas.length;
+    const parcela=im.recLocParcelas.find((p,idx)=>p.mes===mesStr);
+    const idxParc=im.recLocParcelas.findIndex(p=>p.mes===mesStr);
+    if(parcela){
+      const label=nParc===1?'Parcela única':`Parcela ${idxParc+1}/${nParc}`;
+      return{tipo:'loc',val:parcela.valor,det:`${label} — Locação personalizada`};
+    }
+    // Se tem recebimento personalizado, não usa o automático
+    if(srv==='adm_completa'||srv==='administracao'||srv==='adm_parceria'){
+      // Para adm: 10% mensais ainda se aplicam a partir do 2º mês (não afetados)
+      // só o 1º aluguel é personalizado — continuar para lógica de adm abaixo
+    } else {
+      // Para intermediação: sem recebimento personalizado neste mês = sem receita
+      return{tipo:null,val:0,det:''};
+    }
+  }
+
   // ── INTERMEDIAÇÕES ──
   if(srv==='inter_completa'||srv==='intermediacao'){
-    if(assina)return{tipo:'loc',val:a,det:'1º aluguel — Intermediação Completa (100%)'};
+    if(assina&&im.recLoc!=='custom')return{tipo:'loc',val:a,det:'1º aluguel — Intermediação Completa (100%)'};
     return{tipo:null,val:0,det:''};
   }
   if(srv==='inter_parceria'){
-    if(assina)return{tipo:'loc',val:a*.5,det:`Intermediação com Parceria (50% de ${fR(a)})`};
+    if(assina&&im.recLoc!=='custom')return{tipo:'loc',val:a*.5,det:`Intermediação com Parceria (50% de ${fR(a)})`};
     return{tipo:null,val:0,det:''};
   }
   if(srv==='inter_parcial'){
-    if(assina)return{tipo:'loc',val:a*.25,det:`Intermediação Parcial (25% de ${fR(a)})`};
+    if(assina&&im.recLoc!=='custom')return{tipo:'loc',val:a*.25,det:`Intermediação Parcial (25% de ${fR(a)})`};
     return{tipo:null,val:0,det:''};
   }
 
   // ── ADMINISTRAÇÃO COMPLETA ──
   if(srv==='adm_completa'||srv==='administracao'){
-    if(assina)return{tipo:'loc',val:a,det:'1º aluguel — Administração Completa (100%)'};
+    if(assina&&im.recLoc!=='custom')return{tipo:'loc',val:a,det:'1º aluguel — Administração Completa (100%)'};
     if(contratoAtivo()){
       // A partir do 2º mês: 10%
       const iniDepois=mesInicioAno<y||(mesInicioAno===y&&mesInicioMes<m);
@@ -501,7 +568,7 @@ function recDoMes(im,y,m){
 
   // ── ADMINISTRAÇÃO COMPLETA COM PARCERIA ──
   if(srv==='adm_parceria'){
-    if(assina)return{tipo:'loc',val:a*.5,det:`50% do 1º aluguel — Administração com Parceria`};
+    if(assina&&im.recLoc!=='custom')return{tipo:'loc',val:a*.5,det:`50% do 1º aluguel — Administração com Parceria`};
     if(contratoAtivo()){
       const iniDepois=mesInicioAno<y||(mesInicioAno===y&&mesInicioMes<m);
       if(iniDepois)return{tipo:'adm-m',val:a*.1,det:`10% do aluguel — Administração com Parceria`};
@@ -651,6 +718,19 @@ function allAlerts(){
       });
     }
   }
+  // Alertas de checklist com itens pendentes há mais de 15 dias
+  const now15=new Date();
+  (data.checklists||[]).forEach(ck=>{
+    const diasDesde=Math.floor((now15-new Date(ck.criado))/864e5);
+    if(diasDesde<15)return;
+    const allDone=ck.itens.every(i=>i.concluido);
+    if(allDone)return;
+    const im=data.imoveis.find(i=>i.id===ck.imId);
+    const nPend=ck.itens.filter(i=>!i.concluido).length;
+    a.push({k:`ck_${ck.id}`,t:'warning',ic:'ti-checklist',
+      title:`Checklist pendente — ${im?.nome||'Imóvel removido'}`,
+      sub:`${nPend} item${nPend!==1?'s':''} pendente${nPend!==1?'s':''} há ${diasDesde} dias`});
+  });
   data.imoveis.forEach(im=>{
     const sc=stC(im);
     if(sc==='exp')a.push({k:`${im.id}_ce`,t:'danger',ic:'ti-file-x',title:`Contrato vencido — ${im.nome}`,sub:`Proprietário: ${im.proprietario||'—'} · Venceu em ${fD(im.fimContrato)}`});
@@ -716,6 +796,7 @@ function openDetalhe(id){
   ${(im.historico&&im.historico.length>0)?row('Contratos anteriores',`<button class="btn sm ghost" onclick="closeModal();openHistorico(${im.id})"><i class="ti ti-history"></i>${im.historico.length} anterior${im.historico.length!==1?'es':''}</button>`):''}
   <div class="modal-foot">
     <button class="btn ghost" onclick="closeModal()">Fechar</button>
+    <button class="btn ghost" onclick="closeModal();abrirOuCriarChecklist(${im.id})"><i class="ti ti-checklist"></i>${(data.checklists||[]).some(c=>c.imId===im.id)?'Ver checklist':'Criar checklist'}</button>
     <button class="btn primary" onclick="closeModal();openEdit(${im.id})"><i class="ti ti-edit"></i>Editar</button>
   </div>`;
 }
@@ -746,7 +827,7 @@ function closeModal(){document.getElementById('overlay').style.display='none';}
 let Ren={id:null,inicioContrato:'',fimContrato:'',aluguel:''};
 function openRenovar(id){
   const im=data.imoveis.find(i=>i.id===id);
-  Ren={id,inicioContrato:'',fimContrato:'',aluguel:im.aluguel||'',srv:im.srv||'inter_completa'};
+  Ren={id,inicioContrato:'',fimContrato:'',aluguel:im.aluguel||'',srv:im.srv||'inter_completa',recLoc:'auto',recLocParcelas:[{mes:'',valor:''}]};
   document.getElementById('overlay').style.display='flex';
   renderModalRenovacao(im);
 }
@@ -808,6 +889,8 @@ async function salvarRenovacao(){
   im.fimContrato=Ren.fimContrato;
   if(Ren.aluguel)im.aluguel=Number(Ren.aluguel);
   if(Ren.srv)im.srv=Ren.srv;
+  im.recLoc=Ren.recLoc||'auto';
+  im.recLocParcelas=Ren.recLoc==='custom'?(Ren.recLocParcelas||[]).filter(p=>p.mes).map(p=>({mes:p.mes,valor:Number(p.valor)||0})):[];
   // Marcar como renovação no histórico do novo contrato
   im.historico[im.historico.length-1].tipo='encerrado';
   closeModal();
@@ -892,9 +975,142 @@ async function saveForm(){
   const obj={...F,aluguel:Number(F.aluguel)||0,condominio:Number(F.condominio)||0,iptuAnual:Number(F.iptuAnual)||0};
   if(editId){obj.id=editId;const i=data.imoveis.findIndex(x=>x.id===editId);data.imoveis[i]=obj;}
   else{obj.id=data.nextId++;data.imoveis.push(obj);}
+  closeModal();await persist();
+  // Perguntar se quer criar checklist (apenas para novos cadastros com status Alugado)
+  if(!editId&&(obj.status==='Alugado')){
+    setTimeout(()=>perguntarChecklist(obj.id),300);
+  } else {
+    render();
+  }
+}
+
+const ITENS_CHECKLIST_PADRAO=[
+  "Confeccionar o contrato de locação",
+  "Assinatura do contrato pelo proprietário",
+  "Assinatura do contrato pelo locatário",
+  "Assinatura do contrato pelo fiador",
+  "Recebimento do aluguel",
+  "Vistoria escrita e fotografada",
+  "Entrega das chaves",
+  "Comunicar a administração do prédio sobre o novo inquilino"
+];
+
+function abrirOuCriarChecklist(imId){
+  // Se já tem checklist ativo, ir para a aba e expandir
+  const ckExistente=data.checklists.find(c=>c.imId===imId);
+  if(ckExistente){
+    ckExpanded.add(ckExistente.id);
+    ckFiltro='todos';
+    go('checklist');
+    return;
+  }
+  // Não tem checklist — abrir modal de criação
+  ckImId=imId;
+  ckEditItens=[...ITENS_CHECKLIST_PADRAO];
+  renderModalChecklist();
+}
+
+function perguntarChecklist(imId){
+  const im=data.imoveis.find(i=>i.id===imId);
+  if(!im)return;
+  // Verificar se já tem checklist
+  const jatem=data.checklists.find(c=>c.imId===imId&&!c.concluido);
+  if(jatem){render();return;}
+  document.getElementById('overlay').style.display='flex';
+  document.getElementById('modal').innerHTML=`
+  <h2><i class="ti ti-checklist" style="color:var(--s-text)"></i> Criar checklist?</h2>
+  <div style="background:var(--bg2);border-radius:var(--r);padding:10px 13px;font-size:13px;margin-bottom:16px;border:0.5px solid var(--border)">
+    ${esc(im.nome)}
+  </div>
+  <p style="font-size:13px;color:var(--text2);margin-bottom:16px">Deseja criar um checklist de etapas para este contrato?</p>
+  <div class="modal-foot">
+    <button class="btn ghost" onclick="closeModal();render()">Não, obrigado</button>
+    <button class="btn primary" onclick="closeModal();abrirModalChecklist(${imId})"><i class="ti ti-checklist"></i>Sim, criar checklist</button>
+  </div>`;
+}
+
+let ckEditItens=[...ITENS_CHECKLIST_PADRAO];
+let ckImId=null;
+
+function abrirModalChecklist(imId){
+  ckImId=imId;
+  ckEditItens=[...ITENS_CHECKLIST_PADRAO];
+  renderModalChecklist();
+}
+
+function renderModalChecklist(){
+  const im=data.imoveis.find(i=>i.id===ckImId);
+  document.getElementById('overlay').style.display='flex';
+  document.getElementById('modal').innerHTML=`
+  <h2><i class="ti ti-checklist"></i> Checklist — ${esc(im?im.nome:'')}</h2>
+  <p style="font-size:12px;color:var(--text2);margin-bottom:12px">Revise os itens. Você pode adicionar novos ou remover os que não se aplicam.</p>
+  <div id="ck-itens-list">
+    ${ckEditItens.map((it,i)=>`
+    <div style="display:flex;align-items:center;gap:8px;padding:8px 0;border-bottom:0.5px solid var(--border)">
+      <i class="ti ti-circle" style="color:var(--text3);font-size:14px"></i>
+      <span style="flex:1;font-size:13px">${esc(it)}</span>
+      <button class="icon-btn del" onclick="ckEditItens.splice(${i},1);renderModalChecklist()" title="Remover"><i class="ti ti-trash"></i></button>
+    </div>`).join('')}
+  </div>
+  <div style="display:flex;gap:8px;margin-top:12px">
+    <input id="ck-novo-item" type="text" placeholder="Novo item..." style="flex:1;padding:8px 10px;font-size:13px;border:0.5px solid var(--border2);border-radius:var(--r);background:var(--bg);color:var(--text)" onkeydown="if(event.key==='Enter')adicionarItemCk()">
+    <button class="btn sm ghost" onclick="adicionarItemCk()"><i class="ti ti-plus"></i>Adicionar</button>
+  </div>
+  <div class="modal-foot" style="margin-top:16px">
+    <button class="btn ghost" onclick="closeModal();render()">Cancelar</button>
+    <button class="btn primary" onclick="salvarChecklist()"><i class="ti ti-device-floppy"></i>Criar checklist</button>
+  </div>`;
+}
+
+function adicionarItemCk(){
+  const inp=document.getElementById('ck-novo-item');
+  if(!inp||!inp.value.trim())return;
+  ckEditItens.push(inp.value.trim());
+  renderModalChecklist();
+}
+
+async function salvarChecklist(){
+  if(!ckImId||ckEditItens.length===0){alert('Adicione pelo menos um item.');return;}
+  const ck={
+    id:data.nextCheckId++,
+    imId:ckImId,
+    criado:new Date().toISOString().split('T')[0],
+    itens:ckEditItens.map((txt,i)=>({id:i+1,txt,concluido:false,dataConclusao:null}))
+  };
+  data.checklists.push(ck);
   closeModal();await persist();render();
+  go('checklist');
 }
 async function delImovel(id){if(!confirm('Remover este imóvel?'))return;data.imoveis=data.imoveis.filter(i=>i.id!==id);await persist();render();}
+function setRecLocParcela(i){
+  const selM=document.getElementById('rlp_mes_'+i);
+  const selA=document.getElementById('rlp_ano_'+i);
+  if(!selM||!selA)return;
+  const mv=parseInt(selM.value),yv=parseInt(selA.value);
+  if(!F.recLocParcelas)F.recLocParcelas=[{mes:'',valor:''}];
+  if(mv&&yv)F.recLocParcelas[i].mes=`${yv}-${String(mv).padStart(2,'0')}`;
+  else F.recLocParcelas[i].mes='';
+}
+function setRenRecParcela(i){
+  const selM=document.getElementById('rrp_mes_'+i);
+  const selA=document.getElementById('rrp_ano_'+i);
+  if(!selM||!selA)return;
+  const mv=parseInt(selM.value),yv=parseInt(selA.value);
+  if(!Ren.recLocParcelas)Ren.recLocParcelas=[{mes:'',valor:''}];
+  if(mv&&yv)Ren.recLocParcelas[i].mes=`${yv}-${String(mv).padStart(2,'0')}`;
+  else Ren.recLocParcelas[i].mes='';
+}
+function addRecLocParcela(){
+  if(!F.recLocParcelas)F.recLocParcelas=[];
+  F.recLocParcelas.push({mes:'',valor:''});
+  renderModal();
+}
+function removeRecLocParcela(i){
+  if(!F.recLocParcelas||F.recLocParcelas.length<=1)return;
+  F.recLocParcelas.splice(i,1);
+  renderModal();
+}
+
 function prevRec(){
   const a=Number(F.aluguel)||0;
   const srv=F.srv||'inter_completa';
@@ -922,7 +1138,7 @@ function renderModal(){
   <div class="form-row"><label>Endereço</label><input value="${esc(F.endereco)}" placeholder="Rua, número, complemento" oninput="F.endereco=this.value"></div>
   <div class="fg">
     <div class="form-row"><label>Tipo</label><select onchange="F.tipo=this.value">${['Residencial','Comercial','Industrial','Terreno'].map(t=>`<option${F.tipo===t?' selected':''}>${t}</option>`).join('')}</select></div>
-    <div class="form-row"><label>Status</label><select onchange="F.status=this.value">${['Disponível','Alugado','Em reforma'].map(t=>`<option${F.status===t?' selected':''}>${t}</option>`).join('')}</select></div>
+    <div class="form-row"><label>Status</label><select onchange="F.status=this.value">${['Disponível','Alugado','Suspenso'].map(t=>`<option${F.status===t?' selected':''}>${t}</option>`).join('')}</select></div>
   </div>
   <div class="slbl">Tipo de serviço</div>
   <div class="form-row"><label>Tipo de serviço</label>
@@ -939,6 +1155,42 @@ function renderModal(){
         <option value="adm_parcial_parceria"${F.srv==='adm_parcial_parceria'?' selected':''}>Administração Parcial com Parceria — 50% do 1º aluguel todo ano</option>
       </optgroup>
     </select></div>
+  <div class="slbl">Recebimento da locação (1º aluguel)</div>
+  <div class="form-row">
+    <div style="display:flex;gap:8px;margin-bottom:10px">
+      <button type="button" class="btn sm ${F.recLoc==='auto'?'primary':'ghost'}" onclick="F.recLoc='auto';renderModal()">Automático</button>
+      <button type="button" class="btn sm ${F.recLoc==='custom'?'primary':'ghost'}" onclick="F.recLoc='custom';renderModal()">Personalizado</button>
+    </div>
+    <div style="font-size:12px;color:var(--text2);margin-bottom:8px">
+      ${F.recLoc==='auto'?'O valor entra na receita no mês de assinatura do contrato automaticamente.':'Defina quando e quanto receberá. Pode ser antes ou depois da assinatura.'}
+    </div>
+    ${F.recLoc==='custom'?`
+    <div id="rec-loc-parcelas">
+      ${(F.recLocParcelas||[{mes:'',valor:''}]).map((p,i)=>`
+      <div style="display:flex;gap:6px;align-items:flex-end;margin-bottom:8px">
+        <div style="flex:1">
+          <label style="font-size:11px;color:var(--text2)">Mês da parcela ${i+1}</label>
+          <div style="display:flex;gap:4px">
+            <select id="rlp_mes_${i}" onchange="setRecLocParcela(${i})" style="flex:1;padding:8px 6px;font-size:13px;border:0.5px solid var(--border2);border-radius:var(--r);background:var(--bg);color:var(--text)">
+              <option value="">Mês</option>
+              ${MESES_FULL.map((mn,mi)=>`<option value="${mi+1}"${p.mes&&parseInt(p.mes.split('-')[1])===mi+1?' selected':''}>${mn}</option>`).join('')}
+            </select>
+            <select id="rlp_ano_${i}" onchange="setRecLocParcela(${i})" style="width:80px;padding:8px 6px;font-size:13px;border:0.5px solid var(--border2);border-radius:var(--r);background:var(--bg);color:var(--text)">
+              <option value="">Ano</option>
+              ${(()=>{const y=new Date().getFullYear();let o='';for(let yr=y-2;yr<=y+5;yr++)o+=`<option value="${yr}"${p.mes&&parseInt(p.mes.split('-')[0])===yr?' selected':''}>${yr}</option>`;return o;})()}
+            </select>
+          </div>
+        </div>
+        <div style="width:120px">
+          <label style="font-size:11px;color:var(--text2)">Valor (R$)</label>
+          <input type="number" min="0" step="0.01" value="${p.valor||''}" placeholder="0,00" oninput="F.recLocParcelas[${i}].valor=parseFloat(this.value)||0" style="width:100%;padding:8px 6px;font-size:13px;border:0.5px solid var(--border2);border-radius:var(--r);background:var(--bg);color:var(--text)">
+        </div>
+        ${(F.recLocParcelas||[]).length>1?`<button type="button" class="icon-btn del" onclick="removeRecLocParcela(${i})" style="flex-shrink:0;margin-bottom:2px"><i class="ti ti-trash"></i></button>`:'<div style="width:28px"></div>'}
+      </div>`).join('')}
+    </div>
+    <button type="button" class="btn sm ghost" onclick="addRecLocParcela()"><i class="ti ti-plus"></i>Adicionar parcela</button>
+    `:''}
+  </div>
   <div class="slbl">Valores</div>
   <div class="fg">
     <div class="form-row"><label>Aluguel (R$)</label><input type="number" min="0" step="0.01" value="${F.aluguel}" placeholder="0,00" oninput="F.aluguel=this.value;updPrev()"></div>
@@ -1029,9 +1281,12 @@ function renderReceita(){
   const mostrarVendas=srvFilterRec==='todos'||srvFilterRec==='venda';
   const vdMes=recVendasDoMes(y,m);
   const linhasBruto=sortByProp(data.imoveis.map(im=>({im,r:recDoMes(im,y,m),proprietario:im.proprietario})).filter(l=>l.r.val>0)).map(l=>({im:l.im,r:l.r}));
-  const linhas=linhasBruto.filter(({im})=>{
+  const linhas=linhasBruto.filter(({im,r})=>{
     if(qRec&&![im.nome,im.proprietario,im.inquilino].some(v=>v&&v.toLowerCase().includes(qRec)))return false;
-    if(srvFilterRec==='todos'||srvFilterRec==='venda')return true;
+    if(srvFilterRec==='todos')return true;
+    if(srvFilterRec==='venda')return false;
+    if(srvFilterRec==='loc')return r.tipo==='loc'||r.tipo==='inter';
+    if(srvFilterRec==='adm')return r.tipo==='adm-m';
     const s=im.srv||'inter_completa';
     const norm=s==='intermediacao'?'inter_completa':s==='administracao'?'adm_completa':s;
     return norm===srvFilterRec;
@@ -1064,6 +1319,10 @@ function renderReceita(){
       '</tr>';
   }).join('');
 
+  const nLoc=linhasBruto.filter(l=>l.r.tipo==='loc'||l.r.tipo==='inter').length;
+  const nAdm=linhasBruto.filter(l=>l.r.tipo==='adm-m').length;
+  const nVenda=vdMes.itens.length;
+
   return`
   <div class="month-bar no-print">
     <label><i class="ti ti-calendar"></i>Mês de referência</label>
@@ -1077,14 +1336,14 @@ function renderReceita(){
     <h2>Receita por Mês — ${MESES[m-1]} ${y}</h2>
     <p>Gerado em ${new Date().toLocaleDateString('pt-BR')}</p>
   </div>
-  ${(()=>{const tVenda=vdMes.total;const totalGeral=total+tVenda;const nLoc=linhas.filter(l=>l.r.tipo==='loc'||l.r.tipo==='inter').length;const nAdm=linhas.filter(l=>l.r.tipo==='adm-m').length;const nVenda=itensVendaFiltrados.length;return`
+  ${(()=>{const tVenda=vdMes.total;const totalGeral=total+tVenda;return`
   <div class="metrics" style="grid-template-columns:repeat(3,1fr);margin-bottom:10px">
-    <div class="metric ${tLoc>0?'hl':''}"><div class="ml"><i class="ti ti-handshake"></i>Locação (1º aluguel)</div><div class="mv">${fR(tLoc)}</div><div class="ms">${tLoc>0?'primeiro aluguel recebido':'sem contratos novos'}</div></div>
-    <div class="metric ${tAdm>0?'hl':''}"><div class="ml"><i class="ti ti-settings"></i>Administração</div><div class="mv">${fR(tAdm)}</div><div class="ms">${tAdm>0?'10% mensal recorrente':'sem imóveis administrados ativos'}</div></div>
-    <div class="metric ${tVenda>0?'hl':''}"><div class="ml"><i class="ti ti-home-dollar"></i>Vendas</div><div class="mv">${fR(tVenda)}</div><div class="ms">${tVenda>0?nVenda+' parcela'+(nVenda!==1?'s':''):'sem vendas neste mês'}</div></div>
+    <div class="metric ${tLoc>0?'hl':''}" style="${tLoc>0?'cursor:pointer':''}${srvFilterRec==='loc'?';box-shadow:0 0 0 2px var(--s-text)':''}" onclick="${tLoc>0?'setSrvRec(\'loc\')':''}"><div class="ml"><i class="ti ti-handshake"></i>Locação (1º aluguel)</div><div class="mv">${fR(tLoc)}</div><div class="ms">${tLoc>0?nLoc+(nLoc!==1?' locações':' locação'):'sem contratos novos'}</div></div>
+    <div class="metric ${tAdm>0?'hl':''}" style="${tAdm>0?'cursor:pointer':''}${srvFilterRec==='adm'?';box-shadow:0 0 0 2px var(--s-text)':''}" onclick="${tAdm>0?'setSrvRec(\'adm\')':''}"><div class="ml"><i class="ti ti-settings"></i>Administração</div><div class="mv">${fR(tAdm)}</div><div class="ms">${tAdm>0?nAdm+' imóvel'+(nAdm!==1?'s':'')+' administrado'+(nAdm!==1?'s':''):'sem imóveis administrados ativos'}</div></div>
+    <div class="metric ${tVenda>0?'hl':''}" style="${tVenda>0?'cursor:pointer':''}${srvFilterRec==='venda'?';box-shadow:0 0 0 2px var(--s-text)':''}" onclick="${tVenda>0?'setSrvRec(\'venda\')':''}"><div class="ml"><i class="ti ti-home-dollar"></i>Vendas</div><div class="mv">${fR(tVenda)}</div><div class="ms">${tVenda>0?nVenda+' parcela'+(nVenda!==1?'s':''):'sem vendas neste mês'}</div></div>
   </div>
   <div class="metrics" style="grid-template-columns:1fr;margin-bottom:18px">
-    <div class="metric ${totalGeral>0?'hl':''}"><div class="ml"><i class="ti ti-cash"></i>Total do mês — ${MESES[m-1]} ${y}</div><div class="mv">${fR(totalGeral)}</div><div class="ms">${linhas.length} locação/administração${tVenda>0?' + '+vd.itens.length+' venda(s)':''}</div></div>
+    <div class="metric ${totalGeral>0?'hl':''}"><div class="ml"><i class="ti ti-cash"></i>Total do mês — ${MESES[m-1]} ${y}</div><div class="mv">${fR(totalGeral)}</div><div class="ms">${linhas.length} locação/administração${tVenda>0?' + '+nVenda+' venda(s)'+'':''}</div></div>
   </div>`;})()}
   <div class="card">
     <div class="card-hd" style="flex-wrap:wrap;gap:8px">
@@ -1121,6 +1380,7 @@ function renderImoveis(){
     <div class="table-scroll">${(()=>{const list=sortByProp(data.imoveis.filter(im=>matchSearch('imoveis',im)));return list.length===0?`<div class="no-data"><i class="ti ti-building-off"></i>${data.imoveis.length===0?'Clique em "Novo imóvel" para começar':'Nenhum resultado encontrado.'}</div>`:`<div class="card-scroll"><table><thead><tr><th>Imóvel</th><th>Serviço</th><th>Proprietário / Inquilino</th><th>Aluguel</th><th>Cond.</th><th>Receita da imobiliária</th><th></th></tr></thead><tbody>${list.map(im=>{const a=im.aluguel||0,c=im.condominio||0;const rec=im.status==='Alugado'?(im.srv==='administracao'?`${fR(a)} + ${fR(a*.1)}/mês (administração)`:`${fR(a)} — locação`):'—';return`<tr style="cursor:pointer" onclick="openDetalhe(${im.id})"><td><div class="tdname">${esc(im.nome)}</div><div class="tdsub">${im.tipo} · ${im.status}</div></td><td>${bS(im)}</td><td style="font-size:12px"><div class="tdname">${esc(im.proprietario||'—')}</div><div class="tdsub">${esc(im.inquilino||'—')}</div></td><td style="font-size:12px;white-space:nowrap">${a?fR(a):'—'}</td><td style="font-size:12px;white-space:nowrap">${c?fR(c):'—'}</td><td style="font-size:12px;font-weight:500;white-space:nowrap">${rec}</td><td class="ac" style="white-space:nowrap" onclick="event.stopPropagation()">
   <button class="icon-btn" onclick="openHistorico(${im.id})" title="Histórico de contratos"><i class="ti ti-history"></i></button>
   <button class="icon-btn" onclick="openEdit(${im.id})" title="Editar"><i class="ti ti-edit"></i></button>
+  <button class="icon-btn ${(data.checklists||[]).some(c=>c.imId===im.id&&!c.itens.every(i=>i.concluido))?'active':''}" onclick="abrirOuCriarChecklist(${im.id})" title="${(data.checklists||[]).some(c=>c.imId===im.id)?'Ver checklist':'Criar checklist'}" style="${(data.checklists||[]).some(c=>c.imId===im.id&&!c.itens.every(i=>i.concluido))?'color:var(--w-text)':''}"><i class="ti ti-checklist"></i></button>
   <button class="icon-btn del" onclick="delImovel(${im.id})" title="Remover"><i class="ti ti-trash"></i></button>
 </td></tr>`;}).join('')}</tbody></table></div>`;})()}</div>`;
 }
@@ -1166,6 +1426,7 @@ function render(){
   else if(curTab==='iptu')c.innerHTML=renderIptu();
   else if(curTab==='vendas')c.innerHTML=renderVendas();
   else if(curTab==='cobrancas')c.innerHTML=renderCobrancas();
+  else if(curTab==='checklist')c.innerHTML=renderChecklist();
   fixDateLocale();
 }
 
@@ -1252,7 +1513,99 @@ async function salvarVenda(){
     parcelas:Venda.parcelas.filter(p=>p.mes).map(p=>({mes:p.mes,valor:Number(p.valor)||0}))};
   if(editVendaId){const i=data.vendas.findIndex(x=>x.id===editVendaId);data.vendas[i]=obj;}
   else{obj.id=data.nextVendaId++;data.vendas.push(obj);}
+  closeModal();await persist();
+  // Perguntar se quer criar checklist (apenas para novos cadastros com status Alugado)
+  if(!editId&&(im.status==='Alugado')){
+    setTimeout(()=>perguntarChecklist(im.id),300);
+  } else {
+    render();
+  }
+}
+
+
+function abrirOuCriarChecklist(imId){
+  // Se já tem checklist ativo, ir para a aba e expandir
+  const ckExistente=data.checklists.find(c=>c.imId===imId);
+  if(ckExistente){
+    ckExpanded.add(ckExistente.id);
+    ckFiltro='todos';
+    go('checklist');
+    return;
+  }
+  // Não tem checklist — abrir modal de criação
+  ckImId=imId;
+  ckEditItens=[...ITENS_CHECKLIST_PADRAO];
+  renderModalChecklist();
+}
+
+function perguntarChecklist(imId){
+  const im=data.imoveis.find(i=>i.id===imId);
+  if(!im)return;
+  // Verificar se já tem checklist
+  const jatem=data.checklists.find(c=>c.imId===imId&&!c.concluido);
+  if(jatem){render();return;}
+  document.getElementById('overlay').style.display='flex';
+  document.getElementById('modal').innerHTML=`
+  <h2><i class="ti ti-checklist" style="color:var(--s-text)"></i> Criar checklist?</h2>
+  <div style="background:var(--bg2);border-radius:var(--r);padding:10px 13px;font-size:13px;margin-bottom:16px;border:0.5px solid var(--border)">
+    ${esc(im.nome)}
+  </div>
+  <p style="font-size:13px;color:var(--text2);margin-bottom:16px">Deseja criar um checklist de etapas para este contrato?</p>
+  <div class="modal-foot">
+    <button class="btn ghost" onclick="closeModal();render()">Não, obrigado</button>
+    <button class="btn primary" onclick="closeModal();abrirModalChecklist(${imId})"><i class="ti ti-checklist"></i>Sim, criar checklist</button>
+  </div>`;
+}
+
+
+function abrirModalChecklist(imId){
+  ckImId=imId;
+  ckEditItens=[...ITENS_CHECKLIST_PADRAO];
+  renderModalChecklist();
+}
+
+function renderModalChecklist(){
+  const im=data.imoveis.find(i=>i.id===ckImId);
+  document.getElementById('overlay').style.display='flex';
+  document.getElementById('modal').innerHTML=`
+  <h2><i class="ti ti-checklist"></i> Checklist — ${esc(im?im.nome:'')}</h2>
+  <p style="font-size:12px;color:var(--text2);margin-bottom:12px">Revise os itens. Você pode adicionar novos ou remover os que não se aplicam.</p>
+  <div id="ck-itens-list">
+    ${ckEditItens.map((it,i)=>`
+    <div style="display:flex;align-items:center;gap:8px;padding:8px 0;border-bottom:0.5px solid var(--border)">
+      <i class="ti ti-circle" style="color:var(--text3);font-size:14px"></i>
+      <span style="flex:1;font-size:13px">${esc(it)}</span>
+      <button class="icon-btn del" onclick="ckEditItens.splice(${i},1);renderModalChecklist()" title="Remover"><i class="ti ti-trash"></i></button>
+    </div>`).join('')}
+  </div>
+  <div style="display:flex;gap:8px;margin-top:12px">
+    <input id="ck-novo-item" type="text" placeholder="Novo item..." style="flex:1;padding:8px 10px;font-size:13px;border:0.5px solid var(--border2);border-radius:var(--r);background:var(--bg);color:var(--text)" onkeydown="if(event.key==='Enter')adicionarItemCk()">
+    <button class="btn sm ghost" onclick="adicionarItemCk()"><i class="ti ti-plus"></i>Adicionar</button>
+  </div>
+  <div class="modal-foot" style="margin-top:16px">
+    <button class="btn ghost" onclick="closeModal();render()">Cancelar</button>
+    <button class="btn primary" onclick="salvarChecklist()"><i class="ti ti-device-floppy"></i>Criar checklist</button>
+  </div>`;
+}
+
+function adicionarItemCk(){
+  const inp=document.getElementById('ck-novo-item');
+  if(!inp||!inp.value.trim())return;
+  ckEditItens.push(inp.value.trim());
+  renderModalChecklist();
+}
+
+async function salvarChecklist(){
+  if(!ckImId||ckEditItens.length===0){alert('Adicione pelo menos um item.');return;}
+  const ck={
+    id:data.nextCheckId++,
+    imId:ckImId,
+    criado:new Date().toISOString().split('T')[0],
+    itens:ckEditItens.map((txt,i)=>({id:i+1,txt,concluido:false,dataConclusao:null}))
+  };
+  data.checklists.push(ck);
   closeModal();await persist();render();
+  go('checklist');
 }
 async function delVenda(id){if(!confirm('Remover esta venda?'))return;data.vendas=data.vendas.filter(x=>x.id!==id);await persist();render();}
 
@@ -1337,6 +1690,19 @@ function renderCobrancas(){
   // Também incluir imóveis do histórico que tinham contrato naquele mês
   // (para meses passados onde o contrato já foi encerrado)
   const admAtivos=[];
+  // Alertas de checklist com itens pendentes há mais de 15 dias
+  const now15=new Date();
+  (data.checklists||[]).forEach(ck=>{
+    const diasDesde=Math.floor((now15-new Date(ck.criado))/864e5);
+    if(diasDesde<15)return;
+    const allDone=ck.itens.every(i=>i.concluido);
+    if(allDone)return;
+    const im=data.imoveis.find(i=>i.id===ck.imId);
+    const nPend=ck.itens.filter(i=>!i.concluido).length;
+    a.push({k:`ck_${ck.id}`,t:'warning',ic:'ti-checklist',
+      title:`Checklist pendente — ${im?.nome||'Imóvel removido'}`,
+      sub:`${nPend} item${nPend!==1?'s':''} pendente${nPend!==1?'s':''} há ${diasDesde} dias`});
+  });
   data.imoveis.forEach(im=>{
     // Usar isAdmTipo para pegar TODOS os tipos de administração
     if(!isAdmTipo(im.srv))return;
@@ -1664,6 +2030,199 @@ function dpOpenPag(){
 
 
 
+/* ── Checklist ── */
+function searchQ_checklist(){return searchQ['checklist']||'';}
+let ckFiltro='pendente'; // 'pendente' | 'concluido' | 'todos'
+let ckExpanded=new Set(); // IDs dos checklists expandidos
+
+async function toggleItemChecklist(ckId,itemId){
+  const ck=data.checklists.find(c=>c.id===ckId);
+  if(!ck)return;
+  const it=ck.itens.find(i=>i.id===itemId);
+  if(!it)return;
+  if(it.concluido){
+    it.concluido=false;it.dataConclusao=null;
+  } else {
+    // Perguntar a data de conclusão
+    const hoje=new Date().toISOString().split('T')[0];
+    document.getElementById('overlay').style.display='flex';
+    document.getElementById('modal').innerHTML=`
+    <h2><i class="ti ti-check" style="color:var(--s-text)"></i> Concluir item</h2>
+    <div style="background:var(--bg2);border-radius:var(--r);padding:10px 13px;font-size:13px;margin-bottom:16px;border:0.5px solid var(--border)">${esc(it.txt)}</div>
+    <div class="form-row"><label>Data de conclusão</label>
+      <div class="dp-wrap"><input id="dp-inp-ckdata" class="dp-input" readonly value="${isoToDisp(hoje)}" placeholder="dd/mm/aaaa" onclick="dpOpen2('ckdata')"></div>
+    </div>
+    <div class="modal-foot">
+      <button class="btn ghost" onclick="closeModal()">Cancelar</button>
+      <button class="btn primary" onclick="confirmarConclusaoItem(${ckId},${itemId})"><i class="ti ti-check"></i>Confirmar</button>
+    </div>`;
+    F['ckdata']=hoje;fixDateLocale();
+    return;
+  }
+  await persist();render();
+}
+
+async function confirmarConclusaoItem(ckId,itemId){
+  const ck=data.checklists.find(c=>c.id===ckId);
+  const it=ck?.itens.find(i=>i.id===itemId);
+  if(!it)return;
+  it.concluido=true;
+  it.dataConclusao=F['ckdata']||new Date().toISOString().split('T')[0];
+  closeModal();await persist();render();
+}
+
+async function adicionarItemExistente(ckId){
+  const inp=document.getElementById('ck-add-inp-'+ckId);
+  if(!inp||!inp.value.trim())return;
+  const ck=data.checklists.find(c=>c.id===ckId);
+  if(!ck)return;
+  const maxId=ck.itens.reduce((m,i)=>Math.max(m,i.id),0);
+  ck.itens.push({id:maxId+1,txt:inp.value.trim(),concluido:false,dataConclusao:null});
+  await persist();render();
+}
+
+let ckDragCkId=null,ckDragItemId=null;
+
+function ckDragStart(e,ckId,itemId){
+  ckDragCkId=ckId;ckDragItemId=itemId;
+  e.dataTransfer.effectAllowed='move';
+  e.dataTransfer.setData('text/plain',itemId);
+  setTimeout(()=>e.target.closest('.ck-item-drag').classList.add('ck-dragging'),0);
+}
+function ckDragEnd(e){
+  document.querySelectorAll('.ck-dragging').forEach(el=>el.classList.remove('ck-dragging'));
+  document.querySelectorAll('.ck-drag-over').forEach(el=>el.classList.remove('ck-drag-over'));
+}
+function ckDragOver(e,ckId,itemId){
+  e.preventDefault();e.dataTransfer.dropEffect='move';
+  document.querySelectorAll('.ck-drag-over').forEach(el=>el.classList.remove('ck-drag-over'));
+  if(ckDragCkId===ckId&&ckDragItemId!==itemId){
+    const el=document.getElementById('ck-item-'+ckId+'-'+itemId);
+    if(el)el.classList.add('ck-drag-over');
+  }
+}
+async function ckDrop(e,ckId,targetItemId){
+  e.preventDefault();
+  if(ckDragCkId!==ckId||ckDragItemId===targetItemId)return;
+  const ck=data.checklists.find(c=>c.id===ckId);
+  if(!ck)return;
+  const fromIdx=ck.itens.findIndex(i=>i.id===ckDragItemId);
+  const toIdx=ck.itens.findIndex(i=>i.id===targetItemId);
+  if(fromIdx<0||toIdx<0)return;
+  const item=ck.itens.splice(fromIdx,1)[0];
+  ck.itens.splice(toIdx,0,item);
+  ckDragCkId=null;ckDragItemId=null;
+  await persist();render();
+}
+
+async function removerItemChecklist(ckId,itemId){
+  const ck=data.checklists.find(c=>c.id===ckId);
+  if(!ck)return;
+  ck.itens=ck.itens.filter(i=>i.id!==itemId);
+  await persist();render();
+}
+
+function removerChecklist(ckId){
+  const ck=data.checklists.find(c=>c.id===ckId);
+  if(!ck)return;
+  const im=data.imoveis.find(i=>i.id===ck.imId);
+  document.getElementById('overlay').style.display='flex';
+  document.getElementById('modal').innerHTML=`
+  <h2><i class="ti ti-trash" style="color:var(--danger,#e53e3e)"></i> Remover checklist</h2>
+  <p style="font-size:13px;color:var(--text2);margin-bottom:16px">Tem certeza que deseja remover o checklist de <strong>${esc(im?.nome||'este imóvel')}</strong>? Esta ação não pode ser desfeita.</p>
+  <div class="modal-foot">
+    <button class="btn ghost" onclick="closeModal()">Cancelar</button>
+    <button class="btn del" onclick="confirmarRemoverChecklist(${ckId})" style="background:var(--danger,#e53e3e);color:#fff;border:none"><i class="ti ti-trash"></i>Remover</button>
+  </div>`;
+}
+async function confirmarRemoverChecklist(ckId){
+  data.checklists=data.checklists.filter(c=>c.id!==ckId);
+  ckExpanded.delete(ckId);
+  closeModal();await persist();render();
+}
+
+function renderChecklist(){
+  const now=new Date();
+  const q=(searchQ['checklist']||'').toLowerCase();
+  const lista=(data.checklists||[]).filter(ck=>{
+    const im=data.imoveis.find(i=>i.id===ck.imId);
+    if(q&&![(im?.nome||''),(im?.proprietario||''),(im?.inquilino||'')].some(v=>v.toLowerCase().includes(q)))return false;
+    const allDone=ck.itens.every(i=>i.concluido);
+    if(ckFiltro==='pendente')return !allDone;
+    if(ckFiltro==='concluido')return allDone;
+    return true;
+  }).sort((a,b)=>new Date(a.criado)-new Date(b.criado));
+
+  const total=data.checklists.length;
+  const pendentes=data.checklists.filter(ck=>!ck.itens.every(i=>i.concluido)).length;
+  const concluidos=total-pendentes;
+
+  return`
+  <div class="print-header"><h2>Checklist de Contratos</h2><p>Gerado em ${new Date().toLocaleDateString('pt-BR')}</p></div>
+  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px" class="no-print">
+    <span style="font-size:15px;font-weight:500">Checklists (${total})</span>
+    <button class="btn sm" onclick="window.print()"><i class="ti ti-printer"></i>Imprimir lista</button>
+  </div>
+  <div class="metrics" style="grid-template-columns:repeat(3,1fr);margin-bottom:14px">
+    <div class="metric ${pendentes>0?'hl':''}" style="cursor:pointer" onclick="ckFiltro='pendente';render()"><div class="ml"><i class="ti ti-clock"></i>Pendentes</div><div class="mv">${pendentes}</div><div class="ms">${pendentes>0?'com itens em aberto':'tudo em dia'}</div></div>
+    <div class="metric" style="cursor:pointer" onclick="ckFiltro='concluido';render()"><div class="ml"><i class="ti ti-check"></i>Concluídos</div><div class="mv">${concluidos}</div><div class="ms">todos os itens feitos</div></div>
+    <div class="metric" style="cursor:pointer" onclick="ckFiltro='todos';render()"><div class="ml"><i class="ti ti-list"></i>Total</div><div class="mv">${total}</div><div class="ms">filtro: ${ckFiltro==='pendente'?'pendentes':ckFiltro==='concluido'?'concluídos':'todos'}</div></div>
+  </div>
+  ${searchBox('checklist')}
+  ${lista.length===0?`<div class="card"><div class="no-data"><i class="ti ti-checklist"></i>${total===0?'Os checklists são criados ao cadastrar um novo imóvel alugado.':'Nenhum resultado encontrado.'}</div></div>`:''}
+  <div style="max-height:65vh;overflow-y:auto;padding-right:2px">
+  ${lista.map(ck=>{
+    const im=data.imoveis.find(i=>i.id===ck.imId);
+    const allDone=ck.itens.every(i=>i.concluido);
+    const nDone=ck.itens.filter(i=>i.concluido).length;
+    const pct=ck.itens.length?Math.round(nDone/ck.itens.length*100):0;
+    const diasDesde=Math.floor((now-new Date(ck.criado))/864e5);
+    const expanded=ckExpanded.has(ck.id);
+    // Pré-calcular corpo expandido para evitar template literals profundamente aninhados
+    const corpoHtml=expanded?
+      '<div style="border-top:0.5px solid var(--border)">'+
+      ck.itens.map(it=>
+        '<div id="ck-item-'+ck.id+'-'+it.id+'" class="ck-item-drag" draggable="true" '+
+        'ondragstart="ckDragStart(event,'+ck.id+','+it.id+')" '+
+        'ondragend="ckDragEnd(event)" '+
+        'ondragover="ckDragOver(event,'+ck.id+','+it.id+')" '+
+        'ondrop="ckDrop(event,'+ck.id+','+it.id+')" '+
+        'style="display:flex;align-items:center;gap:10px;padding:9px 16px;border-bottom:0.5px solid var(--border);'+(it.concluido?'opacity:.7':'')+'">' +
+        '<i class="ti ti-grip-vertical no-print" style="color:var(--text3);font-size:14px;flex-shrink:0;cursor:grab"></i>'+
+        '<button class="no-print" onclick="toggleItemChecklist('+ck.id+','+it.id+')" style="background:none;border:1.5px solid '+(it.concluido?'var(--s-text)':'var(--border2)')+';border-radius:4px;width:18px;height:18px;cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0;color:var(--s-text)">'+(it.concluido?'<i class="ti ti-check" style="font-size:11px"></i>':'')+'</button>'+
+        '<span style="flex:1;font-size:13px;'+(it.concluido?'text-decoration:line-through;color:var(--text2)':'')+'">'+esc(it.txt)+'</span>'+
+        (it.concluido?'<span style="font-size:11px;color:var(--text2)">'+fD(it.dataConclusao)+'</span>':'<span style="font-size:11px;color:var(--w-text)">Pendente</span>')+
+        '<button class="icon-btn del no-print" onclick="removerItemChecklist('+ck.id+','+it.id+')" title="Remover item"><i class="ti ti-trash"></i></button>'+
+        '</div>'
+      ).join('')+
+      '<div class="no-print" style="padding:10px 16px;display:flex;gap:8px">'+
+      '<input id="ck-add-inp-'+ck.id+'" type="text" placeholder="Adicionar novo item..." onkeydown="if(event.keyCode===13)adicionarItemExistente('+ck.id+')" style="flex:1;padding:7px 10px;font-size:12px;border:0.5px solid var(--border2);border-radius:var(--r);background:var(--bg);color:var(--text)">'+
+      '<button class="btn sm ghost" onclick="adicionarItemExistente('+ck.id+')"><i class="ti ti-plus"></i>Adicionar</button>'+
+      '</div></div>'
+    :'';
+    return`
+    <div class="card" style="margin-bottom:10px">
+      <div class="card-hd" style="flex-wrap:wrap;gap:8px;cursor:pointer" onclick="ckExpanded.has(${ck.id})?ckExpanded.delete(${ck.id}):ckExpanded.add(${ck.id});render()">
+        <div style="display:flex;align-items:center;gap:10px;flex:1;min-width:0">
+          <i class="ti ti-chevron-${expanded?'down':'right'}" style="font-size:13px;color:var(--text2);flex-shrink:0"></i>
+          <div style="min-width:0">
+            <div style="font-weight:600;font-size:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(im?.nome||'Imóvel removido')}</div>
+            <div style="font-size:11px;color:var(--text2);margin-top:2px">${esc(im?.proprietario||'—')} · ${esc(im?.inquilino||'—')} · Criado há ${diasDesde}d</div>
+          </div>
+        </div>
+        <div style="display:flex;align-items:center;gap:10px;flex-shrink:0" onclick="event.stopPropagation()">
+          <div style="font-size:12px;font-weight:600;color:${allDone?'var(--s-text)':'var(--text2)'}">${nDone}/${ck.itens.length} · ${pct}%</div>
+          <div style="width:70px;height:5px;background:var(--bg2);border-radius:3px;overflow:hidden"><div style="height:100%;width:${pct}%;background:${allDone?'var(--s-text)':'var(--w-text)'};border-radius:3px"></div></div>
+          <span class="badge ${allDone?'ok':'warn'}">${allDone?'Concluído':'Pendente'}</span>
+          <button class="icon-btn del no-print" onclick="event.stopPropagation();removerChecklist(${ck.id})" title="Remover checklist"><i class="ti ti-trash"></i></button>
+        </div>
+      </div>
+      ${corpoHtml}
+    </div>`;
+  }).join('')}
+  </div>`;
+}
+
 /* ── Formato de data ── */
 function fixDateLocale(){
   setTimeout(()=>{
@@ -1678,11 +2237,29 @@ function fixDateLocale(){
 async function startApp(){
   document.getElementById('setupScreen').style.display='none';
   document.getElementById('appScreen').style.display='block';
+  // Aplicar logo nos elementos que usam LOGO_SRC
+  const logoSrc=LOGO_SRC();
+  document.querySelectorAll('img[data-logo]').forEach(el=>el.src=logoSrc);
   const proj=SURL.replace('https://','').split('.')[0];
   
   await refreshData();
+  // Auto-refresh a cada 30 segundos para detectar mudanças de outros usuários
+  setInterval(async()=>{
+    if(!busy){
+      const remoteAt=await dbGetUpdatedAt();
+      if(remoteAt&&lastSavedAt&&remoteAt!==lastSavedAt){
+        await refreshData();
+        toast('info','Dados atualizados por outro usuário.',3000);
+      }
+    }
+  },30000);
 }
 (async()=>{
+  // Aplicar logo assim que possível
+  setTimeout(()=>{
+    const logoSrc=LOGO_SRC();
+    if(logoSrc)document.querySelectorAll('img[data-logo]').forEach(el=>el.src=logoSrc);
+  },100);
   // Credenciais pré-configuradas — não exige configuração manual
   SURL='https://ghnadmatobzdstekbugq.supabase.co';
   SKEY='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImdobmFkbWF0b2J6ZHN0ZWtidWdxIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzg4NjEwODMsImV4cCI6MjA5NDQzNzA4M30.urEmGY52GaXkcn9s1l_hL6j61IyDeVwXOzONOfSOmpc';
