@@ -330,20 +330,66 @@ async function dbSave(payload){
 /* ── State ── */
 const MESES=['Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'];
 const today=new Date();
-let data={imoveis:[],nextId:1,dismissedAlerts:[],vendas:[],pagamentos:{},nextVendaId:1,checklists:[],nextCheckId:1};
+let data={imoveis:[],nextId:1,dismissedAlerts:[],vendas:[],pagamentos:{},nextVendaId:1,checklists:[],nextCheckId:1,recOverrides:{}};
 let curTab='dashboard',selY=today.getFullYear(),selM=today.getMonth()+1;
 let F={},editId=null,busy=false;
 let searchQ={dashboard:'',receita:'',imoveis:'',contratos:'',iptu:'',vendas:'',cobrancas:'',checklist:''};
 // filtros extras para receita e visão geral
 let srvFilterDash='todos',srvFilterRec='todos';
 let cobY=today.getFullYear(),cobM=today.getMonth()+1;
-function prevCobMonth(){if(cobM===1){cobM=12;cobY--;}else cobM--;render();}
-function nextCobMonth(){if(cobM===12){cobM=1;cobY++;}else cobM++;render();}
-function setCobMonth(v){if(!v)return;const[y,m]=v.split('-').map(Number);cobY=y;cobM=m;render();}
+let cobFiltro='todos';
+function prevCobMonth(){if(cobM===1){cobM=12;cobY--;}else cobM--;cobFiltro='todos';render();}
+function nextCobMonth(){if(cobM===12){cobM=1;cobY++;}else cobM++;cobFiltro='todos';render();}
+function setCobMonth(v){if(!v)return;const[y,m]=v.split('-').map(Number);cobY=y;cobM=m;cobFiltro='todos';render();}
 let srvFilter={imoveis:'todos',contratos:'todos'};
 function setSrv(tab,v){srvFilter[tab]=v;render();const inp=document.querySelector(`input[data-search="${tab}"]`);if(inp){inp.focus();}}
 function setSrvDash(v){srvFilterDash=v;render();}
 function setSrvRec(v){srvFilterRec=(srvFilterRec===v)?'todos':v;render();}
+function recOverrideKey(imId,y,m){return`ro_${imId}_${y}_${m}`;}
+
+function getRecOverride(imId,y,m){const k=recOverrideKey(imId,y,m);return data.recOverrides&&data.recOverrides[k]!==undefined?data.recOverrides[k]:null;}
+function setSrvRecLoc(){setSrvRec('loc');}
+function setSrvRecAdm(){setSrvRec('adm');}
+
+function abrirEditarReceita(imId,y,m,valAuto,valAtual){
+  const im=data.imoveis.find(i=>i.id===imId);
+  const k=recOverrideKey(imId,y,m);
+  const temOverride=data.recOverrides&&data.recOverrides[k]!==undefined;
+  document.getElementById('overlay').style.display='flex';
+  document.getElementById('modal').innerHTML=`
+  <h2><i class="ti ti-edit"></i> Editar receita do mês</h2>
+  <div style="background:var(--bg2);border-radius:var(--r);padding:10px 13px;font-size:13px;margin-bottom:16px;border:0.5px solid var(--border)">
+    ${esc(im?.nome||'')} — ${MESES[m-1]} ${y}
+  </div>
+  <div style="font-size:12px;color:var(--text2);margin-bottom:12px">
+    Valor calculado automaticamente: <strong>${fR(valAuto)}</strong><br>
+    O valor editado afeta apenas este mês e este contrato.
+  </div>
+  <div class="form-row"><label>Valor real recebido (R$)</label>
+    <input id="rec-override-inp" type="number" min="0" step="0.01" value="${valAtual}" placeholder="0,00"
+      style="width:100%;padding:9px 11px;font-size:13px;border:0.5px solid var(--border2);border-radius:var(--r);background:var(--bg);color:var(--text)">
+  </div>
+  <div class="modal-foot">
+    <button class="btn ghost" onclick="closeModal()">Cancelar</button>
+    ${temOverride?'<button class="btn ghost" onclick="removerOverrideReceita('+imId+','+y+','+m+')"><i class="ti ti-refresh"></i>Restaurar automático</button>':''}
+    <button class="btn primary" onclick="salvarOverrideReceita(${imId},${y},${m})"><i class="ti ti-device-floppy"></i>Salvar</button>
+  </div>`;
+}
+
+async function salvarOverrideReceita(imId,y,m){
+  const inp=document.getElementById('rec-override-inp');
+  const val=parseFloat(inp?.value);
+  if(isNaN(val)||val<0){alert('Informe um valor válido.');return;}
+  if(!data.recOverrides)data.recOverrides={};
+  data.recOverrides[recOverrideKey(imId,y,m)]=val;
+  closeModal();await persist();render();
+}
+
+async function removerOverrideReceita(imId,y,m){
+  if(data.recOverrides)delete data.recOverrides[recOverrideKey(imId,y,m)];
+  closeModal();await persist();render();
+}
+function setSrvRecVenda(){setSrvRec('venda');}
 function setSearchRec(v){searchQ['receita']=v.toLowerCase();render();const inp=document.querySelector('input[data-search="receita"]');if(inp){inp.focus();inp.setSelectionRange(inp.value.length,inp.value.length);}}
 function setSearch(tab,v){searchQ[tab]=v.toLowerCase();render();const inp=document.querySelector(`input[data-search="${tab}"]`);if(inp){inp.focus();inp.setSelectionRange(inp.value.length,inp.value.length);}}
 function searchBox(tab){return`<div style="margin-bottom:14px"><input data-search="${tab}" type="text" placeholder="Pesquisar por imóvel, proprietário ou inquilino..." value="${esc(searchQ[tab])}" oninput="setSearch('${tab}',this.value)" style="width:100%;padding:9px 12px;font-size:13px;border:0.5px solid var(--border2);border-radius:var(--r);background:var(--bg);color:var(--text)"></div>`;}
@@ -416,6 +462,7 @@ async function refreshData(){
     if(!data.nextVendaId)data.nextVendaId=1;
     if(!data.checklists)data.checklists=[];
     if(!data.nextCheckId)data.nextCheckId=1;
+    if(!data.recOverrides)data.recOverrides={};
     lastSavedAt=''; // vai ser setado no próximo persist
     setSyncPill('ok','Sincronizado');updateHeader();render();
   }catch(e){setSyncPill('err','Erro de conexão');toast('err',e.message,6000);}
@@ -734,11 +781,11 @@ function allAlerts(){
   data.imoveis.forEach(im=>{
     const sc=stC(im);
     if(sc==='exp')a.push({k:`${im.id}_ce`,t:'danger',ic:'ti-file-x',title:`Contrato vencido — ${im.nome}`,sub:`Proprietário: ${im.proprietario||'—'} · Venceu em ${fD(im.fimContrato)}`});
-    else if(sc==='crit'){const d=dT(im.fimContrato);a.push({k:`${im.id}_cc`,t:'danger',ic:'ti-clock',title:`Contrato vence em ${d}d — ${im.nome}`,sub:`Proprietário: ${im.proprietario||'—'} · Renovar até ${fD(im.fimContrato)}`});}
+    else if(sc==='crit'){const d=dT(im.fimContrato);a.push({k:`${im.id}_cc`,t:'warning',ic:'ti-clock',title:`Contrato vence em ${d}d — ${im.nome}`,sub:`Proprietário: ${im.proprietario||'—'} · Renovar até ${fD(im.fimContrato)}`});}
 
     const si=stI(im);
     if(si==='exp')a.push({k:`${im.id}_ie`,t:'danger',ic:'ti-receipt-2',title:`IPTU vencido — ${im.nome}`,sub:`Proprietário: ${im.proprietario||'—'} · Venceu em ${fD(im.iptuVenc)}`});
-    else if(si==='crit'){const d=dT(im.iptuVenc);a.push({k:`${im.id}_ic`,t:'danger',ic:'ti-receipt-2',title:`IPTU vence em ${d}d — ${im.nome}`,sub:`Proprietário: ${im.proprietario||'—'} · Pagar até ${fD(im.iptuVenc)}`});}
+    else if(si==='crit'){const d=dT(im.iptuVenc);a.push({k:`${im.id}_ic`,t:'warning',ic:'ti-receipt-2',title:`IPTU vence em ${d}d — ${im.nome}`,sub:`Proprietário: ${im.proprietario||'—'} · Pagar até ${fD(im.iptuVenc)}`});}
 
   });
   return a.sort((a,b)=>a.t==='danger'?-1:1);
@@ -813,9 +860,9 @@ const bS=im=>{const lbl=SRV_LABELS[im.srv]||im.srv||'—';return isAdmTipo(im.sr
 
 /* ── Nav ── */
 function go(t){curTab=t;document.querySelectorAll('.tab').forEach(el=>el.classList.remove('active'));document.getElementById('tab_'+t).classList.add('active');render();}
-function prevMonth(){if(selM===1){selM=12;selY--;}else selM--;render();}
-function nextMonth(){if(selM===12){selM=1;selY++;}else selM++;render();}
-function setMonth(v){if(!v)return;const[y,m]=v.split('-').map(Number);selY=y;selM=m;render();}
+function prevMonth(){if(selM===1){selM=12;selY--;}else selM--;srvFilterRec='todos';render();}
+function nextMonth(){if(selM===12){selM=1;selY++;}else selM++;srvFilterRec='todos';render();}
+function setMonth(v){if(!v)return;const[y,m]=v.split('-').map(Number);selY=y;selM=m;srvFilterRec='todos';render();}
 
 /* ── Modal ── */
 const blankF=()=>({nome:'',endereco:'',tipo:'Residencial',srv:'intermediacao',proprietario:'',inquilino:'',aluguel:'',condominio:'',inicioContrato:'',fimContrato:'',iptuAnual:'',iptuVenc:'',status:'Disponível'});
@@ -986,13 +1033,12 @@ async function saveForm(){
 
 const ITENS_CHECKLIST_PADRAO=[
   "Confeccionar o contrato de locação",
-  "Assinatura do contrato pelo proprietário",
-  "Assinatura do contrato pelo locatário",
-  "Assinatura do contrato pelo fiador",
+  "Assinatura do contrato concluída",
   "Recebimento do aluguel",
   "Vistoria escrita e fotografada",
   "Entrega das chaves",
-  "Comunicar a administração do prédio sobre o novo inquilino"
+  "Comunicar a administração do prédio sobre o novo inquilino",
+  "Retirar imóvel do site e dos portais"
 ];
 
 function abrirOuCriarChecklist(imId){
@@ -1231,6 +1277,12 @@ function renderDashboard(){
   const alugados=data.imoveis.filter(i=>i.status==='Alugado');
   const curY=today.getFullYear(),curM=today.getMonth()+1;
   const recMesAtual=data.imoveis.reduce((s,im)=>s+recDoMes(im,curY,curM).val,0)+recVendasDoMes(curY,curM).total;
+  // Acumulado do ano e média mensal
+  let recAcumAno=0;
+  for(let mi=1;mi<=curM;mi++){
+    recAcumAno+=data.imoveis.reduce((s,im)=>s+recDoMes(im,curY,mi).val,0)+recVendasDoMes(curY,mi).total;
+  }
+  const mediaMensal=recAcumAno/curM;
   const mesLabel=MESES[curM-1];
   return`
   <div class="print-header">
@@ -1243,6 +1295,11 @@ function renderDashboard(){
   <div class="metrics">
     <div class="metric"><div class="ml"><i class="ti ti-building"></i>Imóveis</div><div class="mv">${data.imoveis.length}</div><div class="ms">${alugados.length} alugado${alugados.length!==1?'s':''}</div></div>
     <div class="metric"><div class="ml"><i class="ti ti-cash"></i>Receita total — ${mesLabel}</div><div class="mv">${fR(recMesAtual)}</div><div class="ms">receita total do mês atual</div></div>
+    <div class="metric">
+      <div class="ml"><i class="ti ti-chart-bar"></i>Acumulado ${curY}</div>
+      <div class="mv">${fR(recAcumAno)}</div>
+      <div class="ms">média mensal: ${fR(mediaMensal)}</div>
+    </div>
     <div class="metric"><div class="ml"><i class="ti ti-home-off"></i>Disponíveis</div><div class="mv">${data.imoveis.filter(i=>i.status==='Disponível').length}</div><div class="ms">para locação</div></div>
     <div class="metric"><div class="ml"><i class="ti ti-alert-triangle"></i>Alertas ativos</div><div class="mv" style="${active.filter(a=>a.t==='danger').length>0?'color:var(--d-text)':''}">${active.length}</div><div class="ms">${dismissed>0?`${dismissed} dispensado${dismissed!==1?'s':''}`:active.length===0?'tudo em dia':'pendentes'}</div></div>
   </div>
@@ -1292,19 +1349,23 @@ function renderReceita(){
     return norm===srvFilterRec;
   });
   const itensVendaFiltrados=mostrarVendas?vdMes.itens.filter(i=>!qRec||[i.nome,i.proprietario,i.cliente].some(v=>v&&v.toLowerCase().includes(qRec))):[];
-  const tAdm=linhas.filter(l=>l.r.tipo==='adm-m').reduce((s,l)=>s+l.r.val,0);
-  const tLoc=linhas.filter(l=>l.r.tipo==='inter'||l.r.tipo==='loc').reduce((s,l)=>s+l.r.val,0);
+  const tAdm=linhas.filter(l=>l.r.tipo==='adm-m').reduce((s,l)=>{const ov=getRecOverride(l.im.id,y,m);return s+(ov!==null?ov:l.r.val);},0);
+  const tLoc=linhas.filter(l=>l.r.tipo==='inter'||l.r.tipo==='loc').reduce((s,l)=>{const ov=getRecOverride(l.im.id,y,m);return s+(ov!==null?ov:l.r.val);},0);
   const total=tAdm+tLoc;
   // Pré-calcular HTML das linhas para evitar template literals aninhados
   const linhasHtml=linhas.map(({im,r})=>{
     const a=im.aluguel||0;
+    const override=getRecOverride(im.id,y,m);
+    const valExibido=override!==null?override:r.val;
+    const hasOverride=override!==null;
     return'<tr style="cursor:pointer" onclick="openDetalhe('+im.id+')">'+
       '<td><div class="tdname" style="max-width:220px;white-space:normal;word-break:break-word">'+esc(im.nome)+'</div></td>'+
       '<td>'+bS(im)+'</td>'+
       '<td style="font-size:12px"><div>'+esc(im.proprietario||'—')+'</div><div style="color:var(--text2);font-size:11px">'+esc(im.inquilino||'—')+'</div></td>'+
       '<td style="font-size:12px">'+fR(a)+'</td>'+
       '<td style="font-size:12px;color:var(--text2)">'+r.det+'</td>'+
-      '<td style="text-align:right;font-weight:600;color:var(--s-text)">'+fR(r.val)+'</td>'+
+      '<td style="text-align:right;font-weight:600;color:var(--s-text)">'+(hasOverride?'<span title="Valor editado manualmente" style="color:var(--w-text)">✎ </span>':'')+fR(valExibido)+'</td>'+
+      '<td class="no-print" style="width:28px;text-align:center"><button class="icon-btn" onclick="event.stopPropagation();abrirEditarReceita('+im.id+','+y+','+m+','+r.val+','+valExibido+')" title="Editar valor recebido" style="font-size:12px"><i class="ti ti-edit"></i></button></td>'+
       '</tr>';
   }).join('');
   const linhasVendaHtml=itensVendaFiltrados.map(i=>{
@@ -1316,6 +1377,7 @@ function renderReceita(){
       '<td style="font-size:12px">—</td>'+
       '<td style="font-size:12px;color:var(--text2)">'+i.label+'</td>'+
       '<td style="text-align:right;font-weight:600;color:var(--s-text)">'+fR(i.valor)+'</td>'+
+      '<td></td>'+
       '</tr>';
   }).join('');
 
@@ -1338,9 +1400,9 @@ function renderReceita(){
   </div>
   ${(()=>{const tVenda=vdMes.total;const totalGeral=total+tVenda;return`
   <div class="metrics" style="grid-template-columns:repeat(3,1fr);margin-bottom:10px">
-    <div class="metric ${tLoc>0?'hl':''}" style="${tLoc>0?'cursor:pointer':''}${srvFilterRec==='loc'?';box-shadow:0 0 0 2px var(--s-text)':''}" onclick="${tLoc>0?'setSrvRec(\'loc\')':''}"><div class="ml"><i class="ti ti-handshake"></i>Locação (1º aluguel)</div><div class="mv">${fR(tLoc)}</div><div class="ms">${tLoc>0?nLoc+(nLoc!==1?' locações':' locação'):'sem contratos novos'}</div></div>
-    <div class="metric ${tAdm>0?'hl':''}" style="${tAdm>0?'cursor:pointer':''}${srvFilterRec==='adm'?';box-shadow:0 0 0 2px var(--s-text)':''}" onclick="${tAdm>0?'setSrvRec(\'adm\')':''}"><div class="ml"><i class="ti ti-settings"></i>Administração</div><div class="mv">${fR(tAdm)}</div><div class="ms">${tAdm>0?nAdm+' imóvel'+(nAdm!==1?'s':'')+' administrado'+(nAdm!==1?'s':''):'sem imóveis administrados ativos'}</div></div>
-    <div class="metric ${tVenda>0?'hl':''}" style="${tVenda>0?'cursor:pointer':''}${srvFilterRec==='venda'?';box-shadow:0 0 0 2px var(--s-text)':''}" onclick="${tVenda>0?'setSrvRec(\'venda\')':''}"><div class="ml"><i class="ti ti-home-dollar"></i>Vendas</div><div class="mv">${fR(tVenda)}</div><div class="ms">${tVenda>0?nVenda+' parcela'+(nVenda!==1?'s':''):'sem vendas neste mês'}</div></div>
+    <div class="metric ${tLoc>0?'hl':''}" style="${tLoc>0?'cursor:pointer':''}${srvFilterRec==='loc'?';box-shadow:0 0 0 2px var(--s-text)':''}" onclick="setSrvRecLoc()"><div class="ml"><i class="ti ti-handshake"></i>Locação (1º aluguel)</div><div class="mv">${fR(tLoc)}</div><div class="ms">${tLoc>0?nLoc+(nLoc!==1?' locações':' locação'):'sem contratos novos'}</div></div>
+    <div class="metric ${tAdm>0?'hl':''}" style="${tAdm>0?'cursor:pointer':''}${srvFilterRec==='adm'?';box-shadow:0 0 0 2px var(--s-text)':''}" onclick="setSrvRecAdm()"><div class="ml"><i class="ti ti-settings"></i>Administração</div><div class="mv">${fR(tAdm)}</div><div class="ms">${tAdm>0?nAdm+(nAdm!==1?' imóveis':' imóvel')+' administrado'+(nAdm!==1?'s':''):'sem imóveis administrados ativos'}</div></div>
+    <div class="metric ${tVenda>0?'hl':''}" style="${tVenda>0?'cursor:pointer':''}${srvFilterRec==='venda'?';box-shadow:0 0 0 2px var(--s-text)':''}" onclick="setSrvRecVenda()"><div class="ml"><i class="ti ti-home-dollar"></i>Vendas</div><div class="mv">${fR(tVenda)}</div><div class="ms">${tVenda>0?nVenda+' parcela'+(nVenda!==1?'s':''):'sem vendas neste mês'}</div></div>
   </div>
   <div class="metrics" style="grid-template-columns:1fr;margin-bottom:18px">
     <div class="metric ${totalGeral>0?'hl':''}"><div class="ml"><i class="ti ti-cash"></i>Total do mês — ${MESES[m-1]} ${y}</div><div class="mv">${fR(totalGeral)}</div><div class="ms">${linhas.length} locação/administração${tVenda>0?' + '+nVenda+' venda(s)'+'':''}</div></div>
@@ -1356,9 +1418,9 @@ function renderReceita(){
       </div>
     </div>
     ${(linhas.length===0&&itensVendaFiltrados.length===0)?'<div class="no-data"><i class="ti ti-receipt-off"></i>Nenhuma receita para este mês.</div>':
-      ('<div class="card-scroll"><table><thead><tr><th>Imóvel</th><th>Tipo</th><th>Proprietário / Inquilino</th><th>Aluguel</th><th>Origem</th><th style="text-align:right">Receita</th></tr></thead><tbody>'+
+      ('<div class="card-scroll"><table><thead><tr><th>Imóvel</th><th>Tipo</th><th>Proprietário / Inquilino</th><th>Aluguel</th><th>Origem</th><th style="text-align:right">Receita</th><th class="no-print"></th></tr></thead><tbody>'+
       linhasHtml+linhasVendaHtml+
-      '<tr class="row-total"><td colspan="5">Total do mês</td><td style="text-align:right;color:var(--s-text)">'+fR(total+vdMes.total)+'</td></tr>'+
+      '<tr class="row-total"><td colspan="6">Total do mês</td><td style="text-align:right;color:var(--s-text)">'+fR(linhas.reduce((s,{im,r})=>{const ov=getRecOverride(im.id,y,m);return s+(ov!==null?ov:r.val);},0)+itensVendaFiltrados.reduce((s,i)=>s+i.valor,0))+'</td><td></td></tr>'+
       '</tbody></table></div>')}</div>`;
 }
 
@@ -1649,6 +1711,10 @@ function matchSearchVenda(v){const q=searchQ['vendas'];if(!q)return true;return[
 /* ══════════════════════════════
    COBRANÇAS
 ══════════════════════════════ */
+function toggleCobFiltro(v){cobFiltro=(cobFiltro===v)?'todos':v;render();}
+function toggleCobPago(){toggleCobFiltro('pago');}
+function toggleCobPendente(){toggleCobFiltro('pendente');}
+
 function renderCobrancas(){
   const curY=cobY,curM=cobM;
   const now=new Date();
@@ -1729,8 +1795,15 @@ function renderCobrancas(){
     }
   });
 
+  const isPagoItem=im=>im._histKey?(data.pagamentos&&!!data.pagamentos[im._histKey]):(isPago(im.id,curY,curM));
+  const getDataPag=im=>{const k=im._histKey||chaveAdm(im.id,curY,curM);return data.pagamentos&&data.pagamentos[k]?.data;};
   const q=(searchQ['cobrancas']||'').toLowerCase();
-  const list=sortByProp(admAtivos.filter(im=>!q||[im.nome,im.proprietario,im.inquilino].some(v=>v&&v.toLowerCase().includes(q))));
+  const list=sortByProp(admAtivos.filter(im=>{
+    if(q&&![im.nome,im.proprietario,im.inquilino].some(v=>v&&v.toLowerCase().includes(q)))return false;
+    if(cobFiltro==='pago')return isPagoItem(im);
+    if(cobFiltro==='pendente')return !isPagoItem(im);
+    return true;
+  }));
   const getKey=im=>im._histKey||chaveAdm(im.id,curY,curM);
   function taxaAdm(im){
     const srv2=im.srv||'adm_completa';
@@ -1741,11 +1814,11 @@ function renderCobrancas(){
     if(srv2==='adm_completa'||srv2==='administracao')return a*.1;
     return a*.1; // fallback
   }
-  const totalMes=admAtivos.reduce((s,im)=>s+taxaAdm(im),0);
-  const totalPago=admAtivos.filter(im=>isPago(im.id,curY,curM)||(im._histKey&&data.pagamentos&&data.pagamentos[im._histKey])).reduce((s,im)=>s+taxaAdm(im),0);
+  const taxaAdmReal=im=>{const ov=getRecOverride(im.id,curY,curM);return ov!==null?ov:taxaAdm(im);};
+  const totalMes=admAtivos.reduce((s,im)=>s+taxaAdmReal(im),0);
+  const totalPago=admAtivos.filter(im=>isPago(im.id,curY,curM)||(im._histKey&&data.pagamentos&&data.pagamentos[im._histKey])).reduce((s,im)=>s+taxaAdmReal(im),0);
   const totalPendente=totalMes-totalPago;
-  const isPagoItem=im=>im._histKey?(data.pagamentos&&!!data.pagamentos[im._histKey]):(isPago(im.id,curY,curM));
-  const getDataPag=im=>{const k=im._histKey||chaveAdm(im.id,curY,curM);return data.pagamentos&&data.pagamentos[k]?.data;};
+
 
   return`
   <div class="month-bar no-print">
@@ -1761,19 +1834,22 @@ function renderCobrancas(){
     <p>Gerado em ${new Date().toLocaleDateString('pt-BR')} · Total esperado: ${fR(totalMes)} · Recebido: ${fR(totalPago)} · Pendente: ${fR(totalPendente)}</p>
   </div>
   <div class="metrics" style="grid-template-columns:repeat(3,1fr)">
-    <div class="metric hl"><div class="ml"><i class="ti ti-check"></i>Recebido</div><div class="mv">${fR(totalPago)}</div><div class="ms">${admAtivos.filter(im=>isPagoItem(im)).length} pago${admAtivos.filter(im=>isPagoItem(im)).length!==1?'s':''}</div></div>
-    <div class="metric" style="${totalPendente>0?'background:var(--w-bg);border-color:var(--w-border)':''}">
+    <div class="metric hl" style="cursor:pointer;${cobFiltro==='pago'?'box-shadow:0 0 0 2px var(--s-text)':''}" onclick="toggleCobPago()"><div class="ml"><i class="ti ti-check"></i>Recebido</div><div class="mv">${fR(totalPago)}</div><div class="ms">${admAtivos.filter(im=>isPagoItem(im)).length} pago${admAtivos.filter(im=>isPagoItem(im)).length!==1?'s':''}</div></div>
+    <div class="metric" style="${totalPendente>0?'background:var(--w-bg);border-color:var(--w-border)':''}${cobFiltro==='pendente'?';box-shadow:0 0 0 2px var(--s-text)':''}${totalPendente>0?';cursor:pointer':''}" onclick="toggleCobPendente()">
       <div class="ml" style="${totalPendente>0?'color:var(--w-text)':''}"><i class="ti ti-clock"></i>Pendente</div>
       <div class="mv" style="${totalPendente>0?'color:var(--w-text)':''}">${fR(totalPendente)}</div>
       <div class="ms" style="${totalPendente>0?'color:var(--w-text)':''}">${isCurrentMonth&&daysLeft>0?`faltam ${daysLeft} dia${daysLeft!==1?'s':''} para o fim do mês`:totalPendente>0?'mês de referência':'em dia'}</div>
     </div>
-    <div class="metric"><div class="ml"><i class="ti ti-cash"></i>Total esperado</div><div class="mv">${fR(totalMes)}</div><div class="ms">${admAtivos.length} imóvel${admAtivos.length!==1?'s':''} em administração</div></div>
+    <div class="metric"><div class="ml"><i class="ti ti-cash"></i>Total previsto</div><div class="mv">${fR(totalMes)}</div><div class="ms">${admAtivos.length!==1?admAtivos.length+' imóveis':admAtivos.length+' imóvel'} em administração</div></div>
   </div>
   <div class="no-print" style="margin-bottom:14px"><input data-search="cobrancas" type="text" placeholder="Pesquisar por imóvel, proprietário ou inquilino..." value="${esc(searchQ['cobrancas'])}" oninput="setSearch('cobrancas',this.value)" style="width:100%;padding:9px 12px;font-size:13px;border:0.5px solid var(--border2);border-radius:var(--r);background:var(--bg);color:var(--text)"></div>
   <div class="card">
     <div class="table-scroll">${list.length===0?`<div class="no-data"><i class="ti ti-building-off"></i>${admAtivos.length===0?'Nenhum imóvel em administração neste mês.':'Nenhum resultado encontrado.'}</div>`:`
     <div class="card-scroll"><table><thead><tr><th>Imóvel</th><th>Proprietário / Inquilino</th><th>Aluguel</th><th>Taxa (10%)</th><th>Status</th><th>Ação</th></tr></thead>
     <tbody>${list.map(im=>{
+      const overrideCob=getRecOverride(im.id,curY,curM);
+      const taxa2=overrideCob!==null?overrideCob:taxaAdmReal(im);
+      const taxaEditada=overrideCob!==null;
       const pago=isPagoItem(im);
       const taxa=(im._aluguelRef||0)*.1;
       const dataPag=getDataPag(im);
@@ -1782,7 +1858,7 @@ function renderCobrancas(){
         <td><div class="tdname" style="max-width:220px;white-space:normal;word-break:break-word">${esc(im.nome)}</div></td>
         <td style="font-size:12px"><div>${esc(im.proprietario||'—')}</div><div style="color:var(--text2);margin-top:2px">${esc(im.inquilino||'—')}</div></td>
         <td style="font-size:12px">${fR(im._aluguelRef)}</td>
-        <td style="font-size:12px;font-weight:500">${fR(taxa)}</td>
+        <td style="font-size:12px;font-weight:500">${taxaEditada?'<span title="Valor editado na aba Receita" style="color:var(--w-text)">✎ </span>':''}${fR(taxa2)}</td>
         <td>${pago?`<span class="badge ok"><i class="ti ti-check"></i>Pago${dataPag?' em '+fD(dataPag):''}</span>`:`<span class="badge warn"><i class="ti ti-clock"></i>Pendente</span>`}</td>
         <td><button class="btn sm ${pago?'ghost':'primary'}" onclick="event.stopPropagation();togglePagoKey('${key}',${im.id},${curY},${curM})">
           ${pago?'<i class="ti ti-x"></i>Desfazer':'<i class="ti ti-check"></i>Marcar pago'}
