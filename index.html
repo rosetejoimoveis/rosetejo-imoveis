@@ -1756,19 +1756,6 @@ function renderCobrancas(){
   // Também incluir imóveis do histórico que tinham contrato naquele mês
   // (para meses passados onde o contrato já foi encerrado)
   const admAtivos=[];
-  // Alertas de checklist com itens pendentes há mais de 15 dias
-  const now15=new Date();
-  (data.checklists||[]).forEach(ck=>{
-    const diasDesde=Math.floor((now15-new Date(ck.criado))/864e5);
-    if(diasDesde<15)return;
-    const allDone=ck.itens.every(i=>i.concluido);
-    if(allDone)return;
-    const im=data.imoveis.find(i=>i.id===ck.imId);
-    const nPend=ck.itens.filter(i=>!i.concluido).length;
-    a.push({k:`ck_${ck.id}`,t:'warning',ic:'ti-checklist',
-      title:`Checklist pendente — ${im?.nome||'Imóvel removido'}`,
-      sub:`${nPend} item${nPend!==1?'s':''} pendente${nPend!==1?'s':''} há ${diasDesde} dias`});
-  });
   data.imoveis.forEach(im=>{
     // Usar isAdmTipo para pegar TODOS os tipos de administração
     if(!isAdmTipo(im.srv))return;
