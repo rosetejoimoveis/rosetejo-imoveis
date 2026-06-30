@@ -1784,13 +1784,6 @@ function renderCobrancas(){
 
   const isPagoItem=im=>im._histKey?(data.pagamentos&&!!data.pagamentos[im._histKey]):(isPago(im.id,curY,curM));
   const getDataPag=im=>{const k=im._histKey||chaveAdm(im.id,curY,curM);return data.pagamentos&&data.pagamentos[k]?.data;};
-  const q=(searchQ['cobrancas']||'').toLowerCase();
-  const list=sortByProp(admAtivos.filter(im=>{
-    if(q&&![im.nome,im.proprietario,im.inquilino].some(v=>v&&v.toLowerCase().includes(q)))return false;
-    if(cobFiltro==='pago')return isPagoItem(im);
-    if(cobFiltro==='pendente')return !isPagoItem(im);
-    return true;
-  }));
   const getKey=im=>im._histKey||chaveAdm(im.id,curY,curM);
   function taxaAdm(im){
     const srv2=im.srv||'adm_completa';
@@ -1802,6 +1795,21 @@ function renderCobrancas(){
     return a*.1; // fallback
   }
   const taxaAdmReal=im=>{const ov=getRecOverride(im.id,curY,curM);return ov!==null?ov:taxaAdm(im);};
+  const q=(searchQ['cobrancas']||'').toLowerCase();
+  const qNum=q.replace(/[^\d,.-]/g,'').replace(',', '.');
+  const list=sortByProp(admAtivos.filter(im=>{
+    if(q){
+      const matchTxt=[im.nome,im.proprietario,im.inquilino].some(v=>v&&v.toLowerCase().includes(q));
+      const valAluguel=(im._aluguelRef||0);
+      const valTaxa=taxaAdmReal(im);
+      const matchValor=fR(valAluguel).toLowerCase().includes(q)||fR(valTaxa).toLowerCase().includes(q)||
+        (qNum.length>=2&&(valAluguel.toFixed(2).includes(qNum)||valTaxa.toFixed(2).includes(qNum)));
+      if(!matchTxt&&!matchValor)return false;
+    }
+    if(cobFiltro==='pago')return isPagoItem(im);
+    if(cobFiltro==='pendente')return !isPagoItem(im);
+    return true;
+  }));
   const totalMes=admAtivos.reduce((s,im)=>s+taxaAdmReal(im),0);
   const totalPago=admAtivos.filter(im=>isPago(im.id,curY,curM)||(im._histKey&&data.pagamentos&&data.pagamentos[im._histKey])).reduce((s,im)=>s+taxaAdmReal(im),0);
   const totalPendente=totalMes-totalPago;
